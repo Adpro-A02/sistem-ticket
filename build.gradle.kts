@@ -26,6 +26,20 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
     implementation("org.springframework.boot:spring-boot-starter-web")
+
+    implementation("jakarta.persistence:jakarta.persistence-api:3.1.0")
+
+    implementation("io.jsonwebtoken:jjwt-api:0.11.5")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
+
+    runtimeOnly("org.postgresql:postgresql:42.6.0")
+    testImplementation("com.h2database:h2:2.2.220")
+
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.hibernate.validator:hibernate-validator:8.0.1.Final")
+    implementation("jakarta.validation:jakarta.validation-api:3.0.2")
+
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
