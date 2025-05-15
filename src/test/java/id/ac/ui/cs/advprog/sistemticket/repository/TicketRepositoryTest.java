@@ -2,8 +2,8 @@ package id.ac.ui.cs.advprog.sistemticket.repository;
 
 import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
 import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
-import id.ac.ui.cs.advprog.sistemticket.model.TicketBuilder;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -23,6 +23,7 @@ public class TicketRepositoryTest {
 
     private Ticket sampleTicket;
     private final UUID eventId = UUID.randomUUID();
+    private final LocalDateTime now = LocalDateTime.now();
 
     @BeforeEach
     void setUp() {
@@ -31,8 +32,8 @@ public class TicketRepositoryTest {
         sampleTicket.setPrice(750000.0);
         sampleTicket.setQuota(100);
         sampleTicket.setDescription("VIP access with exclusive merchandise");
-        sampleTicket.setSalesStart(LocalDateTime.now().minusDays(1));
-        sampleTicket.setSalesEnd(LocalDateTime.now().plusDays(30));
+        sampleTicket.setSalesStart(now.minusDays(1));
+        sampleTicket.setSalesEnd(now.plusDays(30));
         sampleTicket.setEventId(eventId);
         sampleTicket.setStatus(TicketStatus.AVAILABLE);
 
@@ -40,14 +41,15 @@ public class TicketRepositoryTest {
     }
 
     @Test
+    @DisplayName("Test Add Ticket")
     void testAddTicket() {
         Ticket newTicket = new Ticket();
         newTicket.setType("Regular");
         newTicket.setPrice(350000.0);
         newTicket.setQuota(500);
         newTicket.setDescription("Standard admission");
-        newTicket.setSalesStart(LocalDateTime.now());
-        newTicket.setSalesEnd(LocalDateTime.now().plusDays(14));
+        newTicket.setSalesStart(now);
+        newTicket.setSalesEnd(now.plusDays(14));
         newTicket.setEventId(eventId);
 
         Ticket savedTicket = ticketRepository.save(newTicket);
@@ -55,12 +57,14 @@ public class TicketRepositoryTest {
     }
 
     @Test
+    @DisplayName("Test List All Tickets")
     void testListTickets() {
         List<Ticket> tickets = ticketRepository.findAll();
         assertThat(tickets).isNotEmpty();
     }
 
     @Test
+    @DisplayName("Test Get Ticket By ID")
     void testGetById() {
         Optional<Ticket> found = ticketRepository.findById(sampleTicket.getId());
         assertThat(found).isPresent();
@@ -68,6 +72,7 @@ public class TicketRepositoryTest {
     }
 
     @Test
+    @DisplayName("Test Find Tickets By Event ID")
     void testFindByEventId() {
         List<Ticket> tickets = ticketRepository.findByEventId(eventId);
         assertThat(tickets).isNotEmpty();
@@ -75,6 +80,7 @@ public class TicketRepositoryTest {
     }
 
     @Test
+    @DisplayName("Test Update Ticket")
     void testUpdateTicket() {
         sampleTicket.setPrice(800000.0);
         Ticket updated = ticketRepository.save(sampleTicket);
@@ -82,6 +88,7 @@ public class TicketRepositoryTest {
     }
 
     @Test
+    @DisplayName("Test Delete Ticket")
     void testDeleteTicket() {
         UUID id = sampleTicket.getId();
         ticketRepository.deleteById(id);
@@ -90,6 +97,7 @@ public class TicketRepositoryTest {
     }
 
     @Test
+    @DisplayName("Test Update Ticket Status")
     void testUpdateStatus() {
         sampleTicket.setStatus(TicketStatus.SOLD_OUT);
         Ticket updated = ticketRepository.save(sampleTicket);
@@ -100,8 +108,42 @@ public class TicketRepositoryTest {
     }
 
     @Test
+    @DisplayName("Test Find Available Tickets")
     void testFindAvailableTickets() {
         List<Ticket> availableTickets = ticketRepository.findByStatus(TicketStatus.AVAILABLE);
         assertThat(availableTickets).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("Test Find By Type")
+    void testFindByType() {
+        List<Ticket> vipTickets = ticketRepository.findByType("VIP");
+        assertThat(vipTickets).isNotEmpty();
+        assertThat(vipTickets.get(0).getType()).isEqualTo("VIP");
+    }
+
+    @Test
+    @DisplayName("Test Find By Active Sales Period")
+    void testFindByActiveSalesPeriod() {
+        List<Ticket> activeTickets = ticketRepository.findBySalesStartBeforeAndSalesEndAfter(now, now);
+        assertThat(activeTickets).isNotEmpty();
+        assertThat(activeTickets.get(0).getId()).isEqualTo(sampleTicket.getId());
+    }
+
+    @Test
+    @DisplayName("Test Find By Price Range")
+    void testFindByPriceRange() {
+        List<Ticket> expensiveTickets = ticketRepository.findByPriceBetween(500000.0, 1000000.0);
+        assertThat(expensiveTickets).isNotEmpty();
+        assertThat(expensiveTickets.get(0).getPrice()).isEqualTo(750000.0);
+    }
+
+    @Test
+    @DisplayName("Test Find By Event ID And Status")
+    void testFindByEventIdAndStatus() {
+        List<Ticket> availableEventTickets = ticketRepository.findByEventIdAndStatus(eventId, TicketStatus.AVAILABLE);
+        assertThat(availableEventTickets).isNotEmpty();
+        assertThat(availableEventTickets.get(0).getEventId()).isEqualTo(eventId);
+        assertThat(availableEventTickets.get(0).getStatus()).isEqualTo(TicketStatus.AVAILABLE);
     }
 }
