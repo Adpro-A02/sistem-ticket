@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.sistemticket.service;
 
+import id.ac.ui.cs.advprog.sistemticket.dto.UpdateTicketDTO;
 import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
 import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
 import id.ac.ui.cs.advprog.sistemticket.model.TicketBuilder;
@@ -338,5 +339,86 @@ public class TicketServiceTest {
         boolean result = ticketService.areTicketsAvailableForEvent(eventId);
 
         assertFalse(result);
+    }
+
+    // Add these tests to your TicketServiceTest.java file
+
+    @Test
+    void testMarkTicketAsSoldOut() {
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenReturn(ticket);
+
+        Ticket result = ticketService.markTicketAsSoldOut(ticketId);
+
+        assertEquals(TicketStatus.SOLD_OUT, result.getStatus());
+        verify(ticketRepository).save(ticket);
+    }
+
+    @Test
+    void testMarkTicketAsAvailable() {
+        ticket.setStatus(TicketStatus.SOLD_OUT);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenReturn(ticket);
+
+        Ticket result = ticketService.markTicketAsAvailable(ticketId);
+
+        assertEquals(TicketStatus.AVAILABLE, result.getStatus());
+        verify(ticketRepository).save(ticket);
+    }
+
+    @Test
+    void testMarkTicketAsAvailable_ZeroQuota() {
+        ticket.setStatus(TicketStatus.SOLD_OUT);
+        ticket.setQuota(0);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+
+        Exception exception = assertThrows(IllegalStateException.class, () -> {
+            ticketService.markTicketAsAvailable(ticketId);
+        });
+
+        assertEquals("Cannot mark ticket as available with zero quota", exception.getMessage());
+    }
+
+    @Test
+    void testMarkTicketAsPurchased() {
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenReturn(ticket);
+
+        Ticket result = ticketService.markTicketAsPurchased(ticketId);
+
+        assertEquals(TicketStatus.PURCHASED, result.getStatus());
+        verify(ticketRepository).save(ticket);
+    }
+
+    @Test
+    void testUpdateTicketWithDTO() {
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenReturn(ticket);
+
+        UpdateTicketDTO dto = new UpdateTicketDTO();
+        dto.setType("Regular");
+        dto.setPrice(500000.0);
+        dto.setQuota(200);
+        dto.setDescription("Regular access");
+        dto.setSalesStart(now);
+        dto.setSalesEnd(now.plusDays(15));
+        dto.setEventId(eventId);
+
+        Ticket result = ticketService.updateTicket(ticketId, dto);
+
+        assertEquals("Regular", result.getType());
+        assertEquals(500000.0, result.getPrice());
+        assertEquals(200, result.getQuota());
+        verify(ticketRepository).save(ticket);
+    }
+
+    @Test
+    void testGetTicketByIdOptional() {
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+
+        Optional<Ticket> result = ticketService.getTicketByIdOptional(ticketId);
+
+        assertTrue(result.isPresent());
+        assertEquals(ticketId, result.get().getId());
     }
 }

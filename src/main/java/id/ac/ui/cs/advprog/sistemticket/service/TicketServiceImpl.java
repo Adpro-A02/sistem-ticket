@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.sistemticket.service;
 
+import id.ac.ui.cs.advprog.sistemticket.dto.UpdateTicketDTO;
 import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
 import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
 import id.ac.ui.cs.advprog.sistemticket.model.TicketBuilder;
@@ -13,6 +14,7 @@ import jakarta.transaction.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -49,6 +51,11 @@ public class TicketServiceImpl implements TicketService {
     }
 
     @Override
+    public Optional<Ticket> getTicketByIdOptional(UUID id) {
+        return ticketRepository.findById(id);
+    }
+
+    @Override
     public List<Ticket> getTicketsByEventId(UUID eventId) {
         return ticketRepository.findByEventId(eventId);
     }
@@ -63,8 +70,7 @@ public class TicketServiceImpl implements TicketService {
     public void deleteTicket(UUID id) {
         Ticket ticket = getTicketById(id);
 
-        if (ticket.getStatus() == TicketStatus.PURCHASED ||
-                ticket.getStatus() == TicketStatus.USED) {
+        if (isTicketPurchasedOrUsed(ticket)) {
             throw new IllegalStateException("Cannot delete ticket that has been purchased");
         }
 
@@ -76,23 +82,13 @@ public class TicketServiceImpl implements TicketService {
     public Ticket purchaseTicket(UUID ticketId, int quantity) {
         Ticket ticket = getTicketById(ticketId);
 
-        if (ticket.getStatus() != TicketStatus.AVAILABLE) {
-            throw new IllegalStateException("Ticket is not available for purchase");
-        }
+        validateTicketForPurchase(ticket, quantity);
 
-        if (ticket.getQuota() < quantity) {
-            throw new IllegalStateException("Not enough tickets available");
-        }
+        // Use the ticket's business logic
+        ticket.reduceQuota(quantity);
 
-        LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(ticket.getSalesStart()) || now.isAfter(ticket.getSalesEnd())) {
-            throw new IllegalStateException("Ticket sales period is not active");
-        }
-
-        int newQuota = ticket.getQuota() - quantity;
-        ticket.setQuota(newQuota);
-
-        if (newQuota == 0) {
+        // If sold out, update status
+        if (ticket.getQuota() == 0) {
             ticket.setStatus(TicketStatus.SOLD_OUT);
         }
 
@@ -108,8 +104,7 @@ public class TicketServiceImpl implements TicketService {
             throw new IllegalStateException("Ticket cannot be validated");
         }
 
-        ticket.setStatus(TicketStatus.USED);
-        return ticketRepository.save(ticket);
+        return changeStatus(ticket, TicketStatus.USED);
     }
 
     @Override
@@ -136,23 +131,102 @@ public class TicketServiceImpl implements TicketService {
     @Override
     @Transactional
     public Ticket updateTicket(UUID id, TicketBuilder updatedTicketBuilder) {
+        return updateTicket(id, ticketBuilderToDTO(updatedTicketBuilder));
+    }
+
+    @Override
+    @Transactional
+    public Ticket updateTicket(UUID id, UpdateTicketDTO dto) {
         Ticket existingTicket = getTicketById(id);
 
-        if (existingTicket.getStatus() == TicketStatus.PURCHASED ||
-                existingTicket.getStatus() == TicketStatus.USED) {
+        if (isTicketPurchasedOrUsed(existingTicket)) {
             throw new IllegalStateException("Cannot update ticket that has been purchased or used");
         }
 
-        Ticket updatedTicket = updatedTicketBuilder.build();
-        updatedTicket.setId(id); // Ensure ID remains the same
-        updatedTicket.setStatus(existingTicket.getStatus()); // Preserve status
+        // Update fields from DTO
+        existingTicket.setType(dto.getType());
+        existingTicket.setPrice(dto.getPrice());
+        existingTicket.setQuota(dto.getQuota());
+        existingTicket.setDescription(dto.getDescription());
+        existingTicket.setSalesStart(dto.getSalesStart());
+        existingTicket.setSalesEnd(dto.getSalesEnd());
+        existingTicket.setEventId(dto.getEventId());
 
-        return ticketRepository.save(updatedTicket);
+        return ticketRepository.save(existingTicket);
     }
 
     @Override
     public boolean areTicketsAvailableForEvent(UUID eventId) {
         List<Ticket> availableTickets = getAvailableTicketsForEvent(eventId);
         return !availableTickets.isEmpty();
+    }
+
+    @Override
+    @Transactional
+    public Ticket markTicketAsSoldOut(UUID id) {
+        Ticket ticket = getTicketById(id);
+        return changeStatus(ticket, TicketStatus.SOLD_OUT);
+    }
+
+    @Override
+    @Transactional
+    public Ticket markTicketAsAvailable(UUID id) {
+        Ticket ticket = getTicketById(id);
+
+        if (ticket.getQuota() <= 0) {
+            throw new IllegalStateException("Cannot mark ticket as available with zero quota");
+        }
+
+        return changeStatus(ticket, TicketStatus.AVAILABLE);
+    }
+
+    @Override
+    @Transactional
+    public Ticket markTicketAsPurchased(UUID id) {
+        Ticket ticket = getTicketById(id);
+        return changeStatus(ticket, TicketStatus.PURCHASED);
+    }
+
+    // Private helper methods
+
+    private boolean isTicketPurchasedOrUsed(Ticket ticket) {
+        return ticket.getStatus() == TicketStatus.PURCHASED ||
+                ticket.getStatus() == TicketStatus.USED;
+    }
+
+    private void validateTicketForPurchase(Ticket ticket, int quantity) {
+        if (ticket.getStatus() != TicketStatus.AVAILABLE) {
+            throw new IllegalStateException("Ticket is not available for purchase");
+        }
+
+        if (ticket.getQuota() < quantity) {
+            throw new IllegalStateException("Not enough tickets available");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(ticket.getSalesStart()) || now.isAfter(ticket.getSalesEnd())) {
+            throw new IllegalStateException("Ticket sales period is not active");
+        }
+    }
+
+    private Ticket changeStatus(Ticket ticket, TicketStatus status) {
+        ticket.setStatus(status);
+        return ticketRepository.save(ticket);
+    }
+
+    private UpdateTicketDTO ticketBuilderToDTO(TicketBuilder builder) {
+        Ticket ticket = builder.build();
+
+        UpdateTicketDTO dto = new UpdateTicketDTO();
+        dto.setType(ticket.getType());
+        dto.setPrice(ticket.getPrice());
+        dto.setQuota(ticket.getQuota());
+        dto.setDescription(ticket.getDescription());
+        dto.setSalesStart(ticket.getSalesStart());
+        dto.setSalesEnd(ticket.getSalesEnd());
+        dto.setEventId(ticket.getEventId());
+        dto.setStatus(ticket.getStatus());
+
+        return dto;
     }
 }
