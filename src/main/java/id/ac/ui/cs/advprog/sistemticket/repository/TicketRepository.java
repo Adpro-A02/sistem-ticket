@@ -11,22 +11,14 @@ import java.util.UUID;
 
 @Repository
 public interface TicketRepository extends JpaRepository<Ticket, UUID> {
-
-    // Find tickets by event ID
-    List<Ticket> findByEventId(UUID eventId);
-
-    // Find tickets by status
-    List<Ticket> findByStatus(TicketStatus status);
-
-    // Find tickets by type
+    List<Ticket> findBySalesStart(LocalDateTime salesStart);
     List<Ticket> findByType(String type);
-
-    // Find tickets with sales period active
+    List<Ticket> findBySalesStartAfter(LocalDateTime now);
+    List<Ticket> findByEventId(UUID eventId);
+    List<Ticket> findByStatus(TicketStatus status);
     List<Ticket> findBySalesStartBeforeAndSalesEndAfter(LocalDateTime now, LocalDateTime sameNow);
-
-    // Find tickets by price range
     List<Ticket> findByPriceBetween(double minPrice, double maxPrice);
-
-    // Custom methods based on your requirements
     List<Ticket> findByEventIdAndStatus(UUID eventId, TicketStatus status);
+    List<Ticket> findByQuotaGreaterThan(int minimumQuota);
+    List<Ticket> findByQuotaLessThan(int maximumQuota);
 }
