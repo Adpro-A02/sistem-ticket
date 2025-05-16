@@ -29,7 +29,7 @@ public class TicketServiceTest {
     private TicketRepository ticketRepository;
 
     @InjectMocks
-    private TicketService ticketService;
+    private TicketServiceImpl ticketService;
 
     private UUID ticketId;
     private UUID eventId;
