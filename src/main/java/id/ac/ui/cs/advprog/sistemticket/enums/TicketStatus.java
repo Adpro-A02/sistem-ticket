@@ -8,7 +8,13 @@ public enum TicketStatus {
     DESCRIPTION_SET("DESCRIPTION_SET"),
     SALES_PERIOD_SET("SALES_PERIOD_SET"),
     EVENT_ASSIGNED("EVENT_ASSIGNED"),
-    READY("READY");
+    READY("READY"),
+
+    AVAILABLE("AVAILABLE"),
+    PURCHASED("PURCHASED"),
+    USED("USED"),
+    SOLD_OUT("SOLD_OUT"),
+    EXPIRED("EXPIRED");
 
     private final String value;
 

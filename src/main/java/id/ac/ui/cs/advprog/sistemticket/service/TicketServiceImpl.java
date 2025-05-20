@@ -228,5 +228,5 @@ public class TicketServiceImpl implements TicketService {
         dto.setStatus(ticket.getStatus());
 
         return dto;
-    }
+        }
 }
