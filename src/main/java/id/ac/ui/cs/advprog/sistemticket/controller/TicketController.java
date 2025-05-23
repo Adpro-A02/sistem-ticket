@@ -1,85 +1,107 @@
 package id.ac.ui.cs.advprog.sistemticket.controller;
 
+import id.ac.ui.cs.advprog.sistemticket.dto.*;
+import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
+import id.ac.ui.cs.advprog.sistemticket.mapper.TicketMapper;
 import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
 import id.ac.ui.cs.advprog.sistemticket.service.TicketService;
-import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/tickets")
+@Validated
 public class TicketController {
     
     @Autowired
     private TicketService ticketService;
     
+    @Autowired
+    private TicketMapper ticketMapper;
+    
     @GetMapping
-    public ResponseEntity<List<Ticket>> getAllTickets() {
+    public ResponseEntity<List<TicketDto>> getAllTickets() {
         List<Ticket> tickets = ticketService.findAll();
-        return ResponseEntity.ok(tickets);
+        List<TicketDto> ticketDtos = tickets.stream()
+                .map(ticketMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ticketDtos);
     }
     
     @GetMapping("/{id}")
-    public ResponseEntity<Ticket> getTicketById(@PathVariable String id) {
+    public ResponseEntity<TicketDto> getTicketById(@PathVariable String id) {
         Ticket ticket = ticketService.findById(id);
         if (ticket == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(ticket);
+        return ResponseEntity.ok(ticketMapper.toDto(ticket));
     }
     
     @GetMapping("/event/{eventId}")
-    public ResponseEntity<List<Ticket>> getTicketsByEventId(@PathVariable String eventId) {
+    public ResponseEntity<List<TicketDto>> getTicketsByEventId(@PathVariable String eventId) {
         List<Ticket> tickets = ticketService.findAllByEventId(eventId);
-        return ResponseEntity.ok(tickets);
+        List<TicketDto> ticketDtos = tickets.stream()
+                .map(ticketMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ticketDtos);
     }
     
     @GetMapping("/available")
-    public ResponseEntity<List<Ticket>> getAvailableTickets() {
+    public ResponseEntity<List<TicketDto>> getAvailableTickets() {
         // Use current time to find available tickets
         Long currentTime = System.currentTimeMillis();
         List<Ticket> tickets = ticketService.findAllAvailable(currentTime);
-        return ResponseEntity.ok(tickets);
+        List<TicketDto> ticketDtos = tickets.stream()
+                .map(ticketMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ticketDtos);
     }
     
     @PostMapping
-    public ResponseEntity<Ticket> createTicket(@RequestBody Ticket ticket) {
+    public ResponseEntity<TicketDto> createTicket(@Valid @RequestBody TicketCreationDto ticketDto) {
+        Ticket ticket = ticketMapper.toEntity(ticketDto);
         Ticket createdTicket = ticketService.createTicket(ticket);
         if (createdTicket == null) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
-        return ResponseEntity.status(HttpStatus.CREATED).body(createdTicket);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ticketMapper.toDto(createdTicket));
     }
     
     @PutMapping("/{id}")
-    public ResponseEntity<Ticket> updateTicket(@PathVariable String id, @RequestBody Ticket ticket) {
-        // Ensure the path variable ID matches the ticket ID
-        ticket.setId(id);
-        
+    public ResponseEntity<TicketDto> updateTicket(@PathVariable String id, 
+                                               @Valid @RequestBody TicketUpdateDto ticketDto) {
         try {
-            Ticket updatedTicket = ticketService.updateTicket(ticket);
-            return ResponseEntity.ok(updatedTicket);
+            Ticket existingTicket = ticketService.findById(id);
+            if (existingTicket == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            ticketMapper.updateEntityFromDto(ticketDto, existingTicket);
+            Ticket updatedTicket = ticketService.updateTicket(existingTicket);
+            
+            return ResponseEntity.ok(ticketMapper.toDto(updatedTicket));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         }
     }
     
     @PatchMapping("/{id}/status")
-    public ResponseEntity<Ticket> updateTicketStatus(@PathVariable String id, @RequestBody Map<String, String> statusUpdate) {
-        String status = statusUpdate.get("status");
-        
+    public ResponseEntity<TicketDto> updateTicketStatus(@PathVariable String id, 
+                                                     @Valid @RequestBody StatusUpdateDto statusDto) {
         try {
-            Ticket updatedTicket = ticketService.updateStatus(id, status);
-            return ResponseEntity.ok(updatedTicket);
+            Ticket updatedTicket = ticketService.updateStatus(id, statusDto.getStatus());
+            return ResponseEntity.ok(ticketMapper.toDto(updatedTicket));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         } catch (IllegalArgumentException e) {
@@ -88,13 +110,15 @@ public class TicketController {
     }
     
     @PostMapping("/{id}/purchase")
-    public ResponseEntity<Ticket> purchaseTicket(@PathVariable String id, @RequestBody Map<String, Integer> purchaseRequest) {
-        Integer amount = purchaseRequest.get("amount");
-        Long currentTime = System.currentTimeMillis();
-        
+    public ResponseEntity<TicketDto> purchaseTicket(@PathVariable String id, 
+                                                 @Valid @RequestBody TicketPurchaseDto purchaseDto) {
         try {
-            Ticket updatedTicket = ticketService.purchaseTicket(id, amount, currentTime);
-            return ResponseEntity.ok(updatedTicket);
+            // Use provided timestamp or current time
+            Long timestamp = purchaseDto.getTimestamp() != null ? 
+                    purchaseDto.getTimestamp() : System.currentTimeMillis();
+                    
+            Ticket updatedTicket = ticketService.purchaseTicket(id, purchaseDto.getAmount(), timestamp);
+            return ResponseEntity.ok(ticketMapper.toDto(updatedTicket));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         } catch (IllegalArgumentException e) {
@@ -103,10 +127,10 @@ public class TicketController {
     }
     
     @PostMapping("/{id}/validate")
-    public ResponseEntity<Ticket> validateTicket(@PathVariable String id) {
+    public ResponseEntity<TicketDto> validateTicket(@PathVariable String id) {
         try {
             Ticket validatedTicket = ticketService.updateStatus(id, TicketStatus.USED.getValue());
-            return ResponseEntity.ok(validatedTicket);
+            return ResponseEntity.ok(ticketMapper.toDto(validatedTicket));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         } catch (IllegalArgumentException e) {
@@ -125,16 +149,20 @@ public class TicketController {
     }
     
     @PostMapping("/batch")
-    public CompletableFuture<ResponseEntity<List<Ticket>>> createTicketsBatch(@RequestBody List<Ticket> tickets) {
+    public CompletableFuture<ResponseEntity<List<TicketDto>>> createTicketsBatch(
+            @Valid @RequestBody List<TicketCreationDto> ticketDtos) {
         return CompletableFuture.supplyAsync(() -> {
-            List<Ticket> createdTickets = new ArrayList<>();
-            for (Ticket ticket : tickets) {
+            List<TicketDto> createdTicketDtos = new ArrayList<>();
+            
+            for (TicketCreationDto dto : ticketDtos) {
+                Ticket ticket = ticketMapper.toEntity(dto);
                 Ticket created = ticketService.createTicket(ticket);
                 if (created != null) {
-                    createdTickets.add(created);
+                    createdTicketDtos.add(ticketMapper.toDto(created));
                 }
             }
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdTickets);
+            
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdTicketDtos);
         });
     }
     
