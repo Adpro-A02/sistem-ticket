@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.sistemticket.model;
 
+import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ public class TicketTest {
     void testCreateTicketWithDefaultConstructor() {
         Ticket ticket = new Ticket();
         assertNotNull(ticket.getId(), "Ticket ID should be automatically generated");
-        assertEquals("AVAILABLE", ticket.getStatus(), "Default status should be AVAILABLE");
+        assertEquals(TicketStatus.AVAILABLE.getValue(), ticket.getStatus(), "Default status should be AVAILABLE");
     }
     
     @Test
@@ -43,15 +44,15 @@ public class TicketTest {
         assertEquals(validDescription, ticket.getDescription());
         assertEquals(validSaleStart, ticket.getSaleStart());
         assertEquals(validSaleEnd, ticket.getSaleEnd());
-        assertEquals("AVAILABLE", ticket.getStatus());
+        assertEquals(TicketStatus.AVAILABLE.getValue(), ticket.getStatus());
     }
     
     @Test
     void testCreateTicketWithCustomStatus() {
         Ticket ticket = new Ticket(validEventId, "VIP", validPrice, 
                                    validQuota, validDescription, 
-                                   validSaleStart, validSaleEnd, "PURCHASED");
-        assertEquals("PURCHASED", ticket.getStatus());
+                                   validSaleStart, validSaleEnd, TicketStatus.PURCHASED.getValue());
+        assertEquals(TicketStatus.PURCHASED.getValue(), ticket.getStatus());
     }
     
     @Test
@@ -122,14 +123,14 @@ public class TicketTest {
     void testSetStatus() {
         Ticket ticket = new Ticket();
         
-        ticket.setStatus("PURCHASED");
-        assertEquals("PURCHASED", ticket.getStatus());
+        ticket.setStatus(TicketStatus.PURCHASED.getValue());
+        assertEquals(TicketStatus.PURCHASED.getValue(), ticket.getStatus());
         
-        ticket.setStatus("EXPIRED");
-        assertEquals("EXPIRED", ticket.getStatus());
+        ticket.setStatus(TicketStatus.EXPIRED.getValue());
+        assertEquals(TicketStatus.EXPIRED.getValue(), ticket.getStatus());
         
-        ticket.setStatus("USED");
-        assertEquals("USED", ticket.getStatus());
+        ticket.setStatus(TicketStatus.USED.getValue());
+        assertEquals(TicketStatus.USED.getValue(), ticket.getStatus());
         
         assertThrows(IllegalArgumentException.class, () -> 
             ticket.setStatus("INVALID_STATUS"));
@@ -166,11 +167,11 @@ public class TicketTest {
         currentTime = validSaleEnd + 1000;
         assertFalse(ticket.isAvailableForPurchase(currentTime));
 
-        ticket.setStatus("PURCHASED");
+        ticket.setStatus(TicketStatus.PURCHASED.getValue());
         currentTime = validSaleStart + 1000;
         assertFalse(ticket.isAvailableForPurchase(currentTime));
 
-        ticket.setStatus("AVAILABLE");
+        ticket.setStatus(TicketStatus.AVAILABLE.getValue());
         ticket.setRemainingQuota(0);
         assertFalse(ticket.isAvailableForPurchase(currentTime));
     }

@@ -1,6 +1,6 @@
 package id.ac.ui.cs.advprog.sistemticket.enums;
 
-import lombok.Getter;
+import lombok.Getter;   
 
 @Getter
 public enum TicketStatus {
