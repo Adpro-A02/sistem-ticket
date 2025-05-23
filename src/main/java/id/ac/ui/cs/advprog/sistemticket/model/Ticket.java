@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.sistemticket.model;
 
+import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -9,11 +10,6 @@ public class Ticket {
     // Valid ticket types
     private static final Set<String> VALID_TYPES = new HashSet<>(
         Arrays.asList("REGULAR", "VIP")
-    );
-    
-    // Valid ticket statuses
-    private static final Set<String> VALID_STATUSES = new HashSet<>(
-        Arrays.asList("AVAILABLE", "PURCHASED", "EXPIRED", "USED")
     );
     
     private String id;
@@ -30,7 +26,7 @@ public class Ticket {
     // Default constructor
     public Ticket() {
         this.id = UUID.randomUUID().toString();
-        this.status = "AVAILABLE";
+        this.status = TicketStatus.AVAILABLE.getValue();
     }
     
     // Main constructor
@@ -72,7 +68,7 @@ public class Ticket {
     }
     
     private void validateStatus(String status) {
-        if (status == null || !VALID_STATUSES.contains(status)) {
+        if (status == null || !TicketStatus.contains(status)) {
             throw new IllegalArgumentException("Invalid ticket status: " + status);
         }
     }
@@ -113,7 +109,7 @@ public class Ticket {
             return false;
         }
         
-        return "AVAILABLE".equals(status) && 
+        return TicketStatus.AVAILABLE.getValue().equals(status) && 
                remainingQuota > 0 && 
                currentTime >= saleStart && 
                currentTime <= saleEnd;
