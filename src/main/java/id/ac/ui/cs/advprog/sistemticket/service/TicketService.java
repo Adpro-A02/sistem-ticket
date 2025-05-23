@@ -3,6 +3,7 @@ package id.ac.ui.cs.advprog.sistemticket.service;
 import id.ac.ui.cs.advprog.sistemticket.dto.UpdateTicketDTO;
 import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
 import id.ac.ui.cs.advprog.sistemticket.model.TicketBuilder;
+import java.util.concurrent.CompletableFuture;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,4 +29,8 @@ public interface TicketService {
     Ticket markTicketAsSoldOut(UUID id);
     Ticket markTicketAsAvailable(UUID id);
     Ticket markTicketAsPurchased(UUID id);
+    CompletableFuture<List<Ticket>> findTicketsByTypeAsync(String type);
+    CompletableFuture<List<Ticket>> getAvailableTicketsForEventAsync(UUID eventId);
+    CompletableFuture<List<Ticket>> searchTicketsByPriceRangeAsync(double minPrice, double maxPrice);
+    void checkAndUpdateExpiredTickets();
 }

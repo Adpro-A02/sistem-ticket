@@ -8,6 +8,9 @@ import id.ac.ui.cs.advprog.sistemticket.repository.TicketRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Async;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
@@ -229,4 +232,41 @@ public class TicketServiceImpl implements TicketService {
 
         return dto;
         }
+
+    @Override
+    @Async("taskExecutor")
+    public CompletableFuture<List<Ticket>> findTicketsByTypeAsync(String type) {
+        return CompletableFuture.completedFuture(ticketRepository.findByType(type));
+    }
+
+    @Override
+    @Async("taskExecutor")
+    public CompletableFuture<List<Ticket>> getAvailableTicketsForEventAsync(UUID eventId) {
+        return CompletableFuture.completedFuture(
+                ticketRepository.findByEventIdAndStatus(eventId, TicketStatus.AVAILABLE)
+        );
+    }
+
+    @Override
+    @Async("taskExecutor")
+    public CompletableFuture<List<Ticket>> searchTicketsByPriceRangeAsync(double minPrice, double maxPrice) {
+        return CompletableFuture.completedFuture(
+                ticketRepository.findByPriceBetween(minPrice, maxPrice)
+        );
+    }
+
+    @Override
+    @Async("taskExecutor")
+    public void checkAndUpdateExpiredTickets() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Ticket> expiredTickets = ticketRepository.findAll().stream()
+                .filter(ticket -> ticket.getStatus() == TicketStatus.AVAILABLE)
+                .filter(ticket -> ticket.getSalesEnd().isBefore(now))
+                .collect(Collectors.toList());
+
+        for (Ticket ticket : expiredTickets) {
+            ticket.setStatus(TicketStatus.EXPIRED);
+            ticketRepository.save(ticket);
+        }
+    }
 }
