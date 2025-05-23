@@ -1,19 +1,26 @@
 package id.ac.ui.cs.advprog.sistemticket.service;
 
 import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
+import id.ac.ui.cs.advprog.sistemticket.event.TicketPurchasedEvent;
 import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
 import id.ac.ui.cs.advprog.sistemticket.repository.TicketRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class TicketServiceImpl implements TicketService {
     
     @Autowired
     private TicketRepository ticketRepository;
+    
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
     
     @Override
     public Ticket createTicket(Ticket ticket) {
@@ -97,7 +104,12 @@ public class TicketServiceImpl implements TicketService {
         }
         
         // Save and return the updated ticket
-        return ticketRepository.save(ticket);
+        Ticket updatedTicket = ticketRepository.save(ticket);
+        
+        // Publish event for asynchronous processing
+        eventPublisher.publishEvent(new TicketPurchasedEvent(updatedTicket, amount));
+        
+        return updatedTicket;
     }
     
     @Override
@@ -108,5 +120,16 @@ public class TicketServiceImpl implements TicketService {
         }
         
         ticketRepository.deleteById(id);
+    }
+    
+    @Async("taskExecutor")
+    public CompletableFuture<Void> processTicketExpiration(String ticketId) {
+        return CompletableFuture.runAsync(() -> {
+            Ticket ticket = ticketRepository.findById(ticketId);
+            if (ticket != null && ticket.getSaleEnd() < System.currentTimeMillis()) {
+                ticket.setStatus(TicketStatus.EXPIRED.getValue());
+                ticketRepository.save(ticket);
+            }
+        });
     }
 }

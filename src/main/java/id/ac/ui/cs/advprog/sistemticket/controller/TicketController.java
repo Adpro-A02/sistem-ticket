@@ -9,9 +9,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/tickets")
@@ -120,5 +122,25 @@ public class TicketController {
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         }
+    }
+    
+    @PostMapping("/batch")
+    public CompletableFuture<ResponseEntity<List<Ticket>>> createTicketsBatch(@RequestBody List<Ticket> tickets) {
+        return CompletableFuture.supplyAsync(() -> {
+            List<Ticket> createdTickets = new ArrayList<>();
+            for (Ticket ticket : tickets) {
+                Ticket created = ticketService.createTicket(ticket);
+                if (created != null) {
+                    createdTickets.add(created);
+                }
+            }
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdTickets);
+        });
+    }
+    
+    @PostMapping("/{id}/expire-async")
+    public ResponseEntity<String> processExpirationAsync(@PathVariable String id) {
+        ticketService.processTicketExpiration(id);
+        return ResponseEntity.accepted().body("Expiration process started for ticket: " + id);
     }
 }
