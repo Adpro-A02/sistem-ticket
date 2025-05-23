@@ -1,0 +1,230 @@
+package id.ac.ui.cs.advprog.sistemticket.repository;
+
+import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
+import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.List;
+import java.util.ArrayList;
+
+class TicketRepositoryTest {
+    private TicketRepository ticketRepository;
+    private List<Ticket> tickets;
+    private String eventId1;
+    private String eventId2;
+    private Long currentTime;
+    
+    @BeforeEach
+    void setUp() {
+        ticketRepository = new TicketRepository();
+        currentTime = System.currentTimeMillis();
+        
+        // Set up test data
+        eventId1 = "eb558e9f-1c39-460e-8860-71af6af63bd6";
+        eventId2 = "7f9e15bb-4b15-42f4-aebc-c3af385fb078";
+        
+        tickets = new ArrayList<>();
+        
+        // Create regular ticket for event 1
+        Ticket ticket1 = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100,
+            "Regular ticket for concert",
+            currentTime,
+            currentTime + 86400000 // 1 day later
+        );
+        tickets.add(ticket1);
+        
+        // Create VIP ticket for event 1
+        Ticket ticket2 = new Ticket(
+            eventId1,
+            "VIP",
+            300.0,
+            50,
+            "VIP ticket for concert",
+            currentTime,
+            currentTime + 86400000 // 1 day later
+        );
+        tickets.add(ticket2);
+        
+        // Create regular ticket for event 2
+        Ticket ticket3 = new Ticket(
+            eventId2,
+            "REGULAR",
+            200.0,
+            200,
+            "Regular ticket for exhibition",
+            currentTime,
+            currentTime + 86400000 // 1 day later
+        );
+        tickets.add(ticket3);
+    }
+    
+    @Test
+    void testSaveCreate() {
+        Ticket ticket = tickets.get(0);
+        Ticket result = ticketRepository.save(ticket);
+        Ticket findResult = ticketRepository.findById(ticket.getId());
+        
+        assertEquals(ticket.getId(), result.getId());
+        assertEquals(ticket.getId(), findResult.getId());
+        assertEquals(ticket.getEventId(), findResult.getEventId());
+        assertEquals(ticket.getType(), findResult.getType());
+        assertEquals(ticket.getPrice(), findResult.getPrice());
+        assertEquals(ticket.getQuota(), findResult.getQuota());
+        assertEquals(ticket.getStatus(), findResult.getStatus());
+    }
+    
+    @Test
+    void testSaveUpdate() {
+        Ticket ticket = tickets.get(0);
+        ticketRepository.save(ticket);
+        
+        // Update the ticket
+        ticket.setStatus(TicketStatus.PURCHASED.getValue());
+        ticket.setRemainingQuota(ticket.getRemainingQuota() - 10);
+        
+        Ticket result = ticketRepository.save(ticket);
+        Ticket findResult = ticketRepository.findById(ticket.getId());
+        
+        assertEquals(ticket.getId(), result.getId());
+        assertEquals(ticket.getId(), findResult.getId());
+        assertEquals(TicketStatus.PURCHASED.getValue(), findResult.getStatus());
+        assertEquals(ticket.getRemainingQuota(), findResult.getRemainingQuota());
+    }
+    
+    @Test
+    void testFindByIdIfIdFound() {
+        for (Ticket ticket : tickets) {
+            ticketRepository.save(ticket);
+        }
+        
+        Ticket findResult = ticketRepository.findById(tickets.get(1).getId());
+        assertEquals(tickets.get(1).getId(), findResult.getId());
+        assertEquals(tickets.get(1).getEventId(), findResult.getEventId());
+        assertEquals(tickets.get(1).getType(), findResult.getType());
+    }
+    
+    @Test
+    void testFindByIdIfIdNotFound() {
+        for (Ticket ticket : tickets) {
+            ticketRepository.save(ticket);
+        }
+        
+        Ticket findResult = ticketRepository.findById("non-existent-id");
+        assertNull(findResult);
+    }
+    
+    @Test
+    void testFindAllByEventId() {
+        for (Ticket ticket : tickets) {
+            ticketRepository.save(ticket);
+        }
+        
+        List<Ticket> eventTickets = ticketRepository.findAllByEventId(eventId1);
+        assertEquals(2, eventTickets.size());
+        
+        // Verify the tickets are for the correct event
+        for (Ticket ticket : eventTickets) {
+            assertEquals(eventId1, ticket.getEventId());
+        }
+    }
+    
+    @Test
+    void testFindAllByType() {
+        for (Ticket ticket : tickets) {
+            ticketRepository.save(ticket);
+        }
+        
+        List<Ticket> regularTickets = ticketRepository.findAllByType("REGULAR");
+        assertEquals(2, regularTickets.size());
+        
+        // Verify the tickets are of the correct type
+        for (Ticket ticket : regularTickets) {
+            assertEquals("REGULAR", ticket.getType());
+        }
+    }
+    
+    @Test
+    void testFindAllByStatus() {
+        for (Ticket ticket : tickets) {
+            ticketRepository.save(ticket);
+        }
+        
+        // All tickets should have AVAILABLE status initially
+        List<Ticket> availableTickets = ticketRepository.findAllByStatus(TicketStatus.AVAILABLE.getValue());
+        assertEquals(3, availableTickets.size());
+        
+        // Change status of one ticket to PURCHASED
+        Ticket ticketToUpdate = tickets.get(0);
+        ticketToUpdate.setStatus(TicketStatus.PURCHASED.getValue());
+        ticketRepository.save(ticketToUpdate);
+        
+        // Now we should have 2 AVAILABLE tickets and 1 PURCHASED
+        availableTickets = ticketRepository.findAllByStatus(TicketStatus.AVAILABLE.getValue());
+        assertEquals(2, availableTickets.size());
+        
+        List<Ticket> purchasedTickets = ticketRepository.findAllByStatus(TicketStatus.PURCHASED.getValue());
+        assertEquals(1, purchasedTickets.size());
+        assertEquals(ticketToUpdate.getId(), purchasedTickets.get(0).getId());
+    }
+    
+    @Test
+    void testFindAllAvailableTickets() {
+        for (Ticket ticket : tickets) {
+            ticketRepository.save(ticket);
+        }
+        
+        // Set one ticket to have zero remaining quota
+        Ticket ticket = tickets.get(0);
+        ticket.setRemainingQuota(0);
+        ticketRepository.save(ticket);
+        
+        // Set another ticket to PURCHASED status
+        Ticket ticket2 = tickets.get(1);
+        ticket2.setStatus(TicketStatus.PURCHASED.getValue());
+        ticketRepository.save(ticket2);
+        
+        // Find available tickets (AVAILABLE status and remaining quota > 0)
+        List<Ticket> availableTickets = ticketRepository.findAllAvailable(currentTime + 1000);
+        assertEquals(1, availableTickets.size());
+        assertEquals(tickets.get(2).getId(), availableTickets.get(0).getId());
+    }
+    
+    @Test
+    void testFindAll() {
+        for (Ticket ticket : tickets) {
+            ticketRepository.save(ticket);
+        }
+        
+        List<Ticket> allTickets = ticketRepository.findAll();
+        assertEquals(3, allTickets.size());
+    }
+    
+    @Test
+    void testDeleteById() {
+        for (Ticket ticket : tickets) {
+            ticketRepository.save(ticket);
+        }
+        
+        String idToDelete = tickets.get(0).getId();
+        
+        // Verify ticket exists
+        assertNotNull(ticketRepository.findById(idToDelete));
+        
+        // Delete the ticket
+        ticketRepository.deleteById(idToDelete);
+        
+        // Verify ticket no longer exists
+        assertNull(ticketRepository.findById(idToDelete));
+        
+        // Verify other tickets still exist
+        List<Ticket> allTickets = ticketRepository.findAll();
+        assertEquals(2, allTickets.size());
+    }
+}
