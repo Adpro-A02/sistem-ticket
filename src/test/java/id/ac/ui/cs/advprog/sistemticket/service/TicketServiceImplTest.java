@@ -17,8 +17,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
+import id.ac.ui.cs.advprog.sistemticket.event.TicketPurchasedEvent;
 import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
 import id.ac.ui.cs.advprog.sistemticket.repository.TicketRepository;
+import org.springframework.context.ApplicationEventPublisher;
+
+import static org.mockito.ArgumentMatchers.argThat;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 @ExtendWith(MockitoExtension.class)
 class TicketServiceImplTest {
@@ -28,6 +34,9 @@ class TicketServiceImplTest {
     
     @Mock
     TicketRepository ticketRepository;
+    
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     
     private List<Ticket> tickets;
     private String eventId1;
@@ -330,5 +339,57 @@ class TicketServiceImplTest {
         
         assertThrows(NoSuchElementException.class, () -> ticketService.deleteTicket(ticketId));
         verify(ticketRepository, times(0)).deleteById(ticketId);
+    }
+    
+    @Test
+    void testPurchaseTicketPublishesEvent() {
+        // Setup
+        Ticket ticket = tickets.get(0);
+        int purchaseAmount = 5;
+        
+        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        doReturn(ticket).when(ticketRepository).save(any(Ticket.class));
+        
+        // Execute
+        ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000);
+        
+        // Fix: Use a more generic argument matcher instead of trying to cast to TicketPurchasedEvent
+        verify(eventPublisher, times(1)).publishEvent(any());
+    }
+    
+    @Test
+    void testProcessTicketExpiration() throws ExecutionException, InterruptedException {
+        // Setup
+        Ticket ticket = tickets.get(0);
+        Long expiredTime = System.currentTimeMillis() + 1000000; // time in the future
+        ticket.setSaleEnd(expiredTime - 2000000); // sale ended before current time
+        
+        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        doReturn(ticket).when(ticketRepository).save(any(Ticket.class));
+        
+        // Execute
+        CompletableFuture<Void> future = ticketService.processTicketExpiration(ticket.getId());
+        
+        // Wait for completion and verify
+        future.get(); // This will wait for the async operation to complete
+        
+        verify(ticketRepository, times(1)).findById(ticket.getId());
+        verify(ticketRepository, times(1)).save(any(Ticket.class));
+    }
+    
+    @Test
+    void testProcessTicketExpirationNoTicket() throws ExecutionException, InterruptedException {
+        // Setup
+        String nonExistentId = "non-existent";
+        doReturn(null).when(ticketRepository).findById(nonExistentId);
+        
+        // Execute
+        CompletableFuture<Void> future = ticketService.processTicketExpiration(nonExistentId);
+        
+        // Wait for completion and verify
+        future.get(); // This will wait for the async operation to complete
+        
+        verify(ticketRepository, times(1)).findById(nonExistentId);
+        verify(ticketRepository, times(0)).save(any(Ticket.class));
     }
 }

@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -25,6 +26,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.hamcrest.Matchers.*;
@@ -295,5 +297,37 @@ public class TicketControllerTest {
                .andExpect(status().isNotFound());
                
         verify(ticketService, times(1)).deleteTicket("non-existent");
+    }
+
+    @Test
+    void testCreateTicketsBatch() throws Exception {
+        // Setup multiple tickets
+        List<Ticket> batchTickets = new ArrayList<>(tickets);
+        
+        // Mock the service response
+        when(ticketService.createTicket(any(Ticket.class))).thenReturn(tickets.get(0));
+        
+        // Execute and verify
+        mockMvc.perform(post("/api/tickets/batch")
+               .contentType(MediaType.APPLICATION_JSON)
+               .content(objectMapper.writeValueAsString(batchTickets)))
+               .andExpect(status().isCreated())
+               .andExpect(jsonPath("$", hasSize(batchTickets.size())));
+               
+        verify(ticketService, times(batchTickets.size())).createTicket(any(Ticket.class));
+    }
+    
+    @Test
+    void testProcessExpirationAsync() throws Exception {
+        // Mock the CompletableFuture
+        CompletableFuture<Void> completedFuture = CompletableFuture.completedFuture(null);
+        when(ticketService.processTicketExpiration(anyString())).thenReturn(completedFuture);
+        
+        // Execute and verify
+        mockMvc.perform(post("/api/tickets/{id}/expire-async", ticketId))
+               .andExpect(status().isAccepted())
+               .andExpect(content().string(containsString("Expiration process started")));
+               
+        verify(ticketService, times(1)).processTicketExpiration(ticketId);
     }
 }
