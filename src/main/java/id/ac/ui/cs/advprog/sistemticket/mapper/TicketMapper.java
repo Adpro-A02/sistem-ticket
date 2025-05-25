@@ -35,21 +35,16 @@ public class TicketMapper {
             return null;
         }
         
-        Ticket ticket = new Ticket(
-            dto.getEventId(),
-            dto.getType(),
-            dto.getPrice(),
-            dto.getQuota(),
-            dto.getDescription(),
-            dto.getSaleStart(),
-            dto.getSaleEnd()
-        );
-        
-        if (dto.getUserId() != null) {
-            ticket.setUserId(dto.getUserId());
-        }
-        
-        return ticket;
+        return new Ticket.Builder()
+            .eventId(dto.getEventId())
+            .type(dto.getType())
+            .price(dto.getPrice())
+            .quota(dto.getQuota())
+            .description(dto.getDescription())
+            .saleStart(dto.getSaleStart())
+            .saleEnd(dto.getSaleEnd())
+            .userId(dto.getUserId())
+            .build();
     }
     
     public void updateEntityFromDto(TicketUpdateDto dto, Ticket ticket) {

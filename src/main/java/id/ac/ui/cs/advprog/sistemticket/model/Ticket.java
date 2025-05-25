@@ -54,41 +54,177 @@ public class Ticket {
     @Column
     private String userId;
     
-    // Default constructor
+    // Default constructor required by JPA
     public Ticket() {
         this.id = UUID.randomUUID().toString();
         this.status = TicketStatus.AVAILABLE.getValue();
     }
     
-    // Main constructor
+    // Private constructor used by the Builder
+    private Ticket(Builder builder) {
+        this.id = builder.id != null ? builder.id : UUID.randomUUID().toString();
+        this.eventId = builder.eventId;
+        this.type = builder.type;
+        this.price = builder.price;
+        this.quota = builder.quota;
+        this.remainingQuota = builder.remainingQuota != null ? builder.remainingQuota : builder.quota;
+        this.description = builder.description;
+        this.saleStart = builder.saleStart;
+        this.saleEnd = builder.saleEnd;
+        this.status = builder.status != null ? builder.status : TicketStatus.AVAILABLE.getValue();
+        this.userId = builder.userId;
+    }
+    
+    // Maintain backward compatibility with existing constructors
     public Ticket(String eventId, String type, Double price, 
                  Integer quota, String description, 
                  Long saleStart, Long saleEnd) {
-        this();
-        
-        validateTicketType(type);
-        validatePrice(price);
-        validateQuota(quota);
-        validateSaleDates(saleStart, saleEnd);
-        
-        this.eventId = eventId;
-        this.type = type;
-        this.price = price;
-        this.quota = quota;
-        this.remainingQuota = quota;
-        this.description = description;
-        this.saleStart = saleStart;
-        this.saleEnd = saleEnd;
+        this(new Builder()
+                .eventId(eventId)
+                .type(type)
+                .price(price)
+                .quota(quota)
+                .description(description)
+                .saleStart(saleStart)
+                .saleEnd(saleEnd));
     }
     
-    // Constructor with custom status
     public Ticket(String eventId, String type, Double price, 
                  Integer quota, String description, 
                  Long saleStart, Long saleEnd, String status) {
-        this(eventId, type, price, quota, description, saleStart, saleEnd);
+        this(new Builder()
+                .eventId(eventId)
+                .type(type)
+                .price(price)
+                .quota(quota)
+                .description(description)
+                .saleStart(saleStart)
+                .saleEnd(saleEnd)
+                .status(status));
+    }
+    
+    // Builder class
+    public static class Builder {
+        private String id;
+        private String eventId;
+        private String type;
+        private Double price;
+        private Integer quota;
+        private Integer remainingQuota;
+        private String description;
+        private Long saleStart;
+        private Long saleEnd;
+        private String status;
+        private String userId;
         
-        validateStatus(status);
-        this.status = status;
+        public Builder id(String id) {
+            this.id = id;
+            return this;
+        }
+        
+        public Builder eventId(String eventId) {
+            this.eventId = eventId;
+            return this;
+        }
+        
+        public Builder type(String type) {
+            validateTicketType(type);
+            this.type = type;
+            return this;
+        }
+        
+        public Builder price(Double price) {
+            validatePrice(price);
+            this.price = price;
+            return this;
+        }
+        
+        public Builder quota(Integer quota) {
+            validateQuota(quota);
+            this.quota = quota;
+            return this;
+        }
+        
+        public Builder remainingQuota(Integer remainingQuota) {
+            this.remainingQuota = remainingQuota;
+            return this;
+        }
+        
+        public Builder description(String description) {
+            this.description = description;
+            return this;
+        }
+        
+        public Builder saleStart(Long saleStart) {
+            this.saleStart = saleStart;
+            return this;
+        }
+        
+        public Builder saleEnd(Long saleEnd) {
+            this.saleEnd = saleEnd;
+            if (this.saleStart != null && saleEnd != null) {
+                validateSaleDates(this.saleStart, saleEnd);
+            }
+            return this;
+        }
+        
+        public Builder status(String status) {
+            validateStatus(status);
+            this.status = status;
+            return this;
+        }
+        
+        public Builder userId(String userId) {
+            this.userId = userId;
+            return this;
+        }
+        
+        public Ticket build() {
+            validateRequiredFields();
+            return new Ticket(this);
+        }
+        
+        private void validateRequiredFields() {
+            if (eventId == null) throw new IllegalArgumentException("Event ID is required");
+            if (type == null) throw new IllegalArgumentException("Ticket type is required");
+            if (price == null) throw new IllegalArgumentException("Price is required");
+            if (quota == null) throw new IllegalArgumentException("Quota is required");
+            if (saleStart == null) throw new IllegalArgumentException("Sale start is required");
+            if (saleEnd == null) throw new IllegalArgumentException("Sale end is required");
+            
+            // Final validation of date range
+            validateSaleDates(saleStart, saleEnd);
+        }
+        
+        private void validateTicketType(String type) {
+            if (type == null || !VALID_TYPES.contains(type)) {
+                throw new IllegalArgumentException("Invalid ticket type: " + type);
+            }
+        }
+        
+        private void validateStatus(String status) {
+            if (status == null || !TicketStatus.contains(status)) {
+                throw new IllegalArgumentException("Invalid ticket status: " + status);
+            }
+        }
+        
+        private void validatePrice(Double price) {
+            if (price == null || price < 0) {
+                throw new IllegalArgumentException("Price cannot be negative");
+            }
+        }
+        
+        private void validateQuota(Integer quota) {
+            if (quota == null || quota <= 0) {
+                throw new IllegalArgumentException("Quota must be positive");
+            }
+        }
+        
+        private void validateSaleDates(Long saleStart, Long saleEnd) {
+            if (saleStart == null || saleEnd == null || saleEnd <= saleStart) {
+                throw new IllegalArgumentException("Sale end must be after sale start");
+            }
+        }
     }
     
     @PrePersist
@@ -101,37 +237,6 @@ public class Ticket {
         }
         if (this.remainingQuota == null) {
             this.remainingQuota = this.quota;
-        }
-    }
-    
-    // Validation methods
-    private void validateTicketType(String type) {
-        if (type == null || !VALID_TYPES.contains(type)) {
-            throw new IllegalArgumentException("Invalid ticket type: " + type);
-        }
-    }
-    
-    private void validateStatus(String status) {
-        if (status == null || !TicketStatus.contains(status)) {
-            throw new IllegalArgumentException("Invalid ticket status: " + status);
-        }
-    }
-    
-    private void validatePrice(Double price) {
-        if (price == null || price < 0) {
-            throw new IllegalArgumentException("Price cannot be negative");
-        }
-    }
-    
-    private void validateQuota(Integer quota) {
-        if (quota == null || quota <= 0) {
-            throw new IllegalArgumentException("Quota must be positive");
-        }
-    }
-    
-    private void validateSaleDates(Long saleStart, Long saleEnd) {
-        if (saleStart == null || saleEnd == null || saleEnd <= saleStart) {
-            throw new IllegalArgumentException("Sale end must be after sale start");
         }
     }
     
