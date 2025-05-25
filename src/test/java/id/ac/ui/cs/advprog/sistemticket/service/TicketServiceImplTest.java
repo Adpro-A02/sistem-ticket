@@ -8,6 +8,7 @@ import static org.mockito.Mockito.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -93,8 +94,8 @@ class TicketServiceImplTest {
     @Test
     void testCreateTicket() {
         Ticket ticket = tickets.get(0);
-        doReturn(null).when(ticketRepository).findById(ticket.getId());
-        doReturn(ticket).when(ticketRepository).save(ticket);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.empty());
+        when(ticketRepository.save(ticket)).thenReturn(ticket);
         
         Ticket result = ticketService.createTicket(ticket);
         
@@ -105,7 +106,7 @@ class TicketServiceImplTest {
     @Test
     void testCreateTicketIfAlreadyExists() {
         Ticket ticket = tickets.get(0);
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
         assertNull(ticketService.createTicket(ticket));
         verify(ticketRepository, times(0)).save(ticket);
@@ -114,7 +115,7 @@ class TicketServiceImplTest {
     @Test
     void testFindTicketById() {
         Ticket ticket = tickets.get(0);
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
         Ticket result = ticketService.findById(ticket.getId());
         
@@ -125,7 +126,7 @@ class TicketServiceImplTest {
     
     @Test
     void testFindTicketByIdNotFound() {
-        doReturn(null).when(ticketRepository).findById("non-existent-id");
+        when(ticketRepository.findById("non-existent-id")).thenReturn(Optional.empty());
         
         assertNull(ticketService.findById("non-existent-id"));
     }

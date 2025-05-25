@@ -103,6 +103,37 @@ public class Ticket {
                 .status(status));
     }
     
+    // Add validation methods to the main class
+    private void validateTicketType(String type) {
+        if (type == null || !VALID_TYPES.contains(type)) {
+            throw new IllegalArgumentException("Invalid ticket type: " + type);
+        }
+    }
+    
+    private void validateStatus(String status) {
+        if (status == null || !TicketStatus.contains(status)) {
+            throw new IllegalArgumentException("Invalid ticket status: " + status);
+        }
+    }
+    
+    private void validatePrice(Double price) {
+        if (price == null || price < 0) {
+            throw new IllegalArgumentException("Price cannot be negative");
+        }
+    }
+    
+    private void validateQuota(Integer quota) {
+        if (quota == null || quota <= 0) {
+            throw new IllegalArgumentException("Quota must be positive");
+        }
+    }
+    
+    private void validateSaleDates(Long saleStart, Long saleEnd) {
+        if (saleStart == null || saleEnd == null || saleEnd <= saleStart) {
+            throw new IllegalArgumentException("Sale end must be after sale start");
+        }
+    }
+    
     // Builder class
     public static class Builder {
         private String id;

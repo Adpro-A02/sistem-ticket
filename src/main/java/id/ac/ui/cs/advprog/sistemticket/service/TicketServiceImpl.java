@@ -33,7 +33,8 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     public Ticket findById(String id) {
-        return ticketRepository.findById(id).orElse(null);
+        Optional<Ticket> ticketOpt = ticketRepository.findById(id);
+        return ticketOpt.orElse(null);
     }
     
     @Override
