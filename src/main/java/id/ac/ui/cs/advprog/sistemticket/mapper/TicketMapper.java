@@ -25,6 +25,7 @@ public class TicketMapper {
         dto.setSaleStart(ticket.getSaleStart());
         dto.setSaleEnd(ticket.getSaleEnd());
         dto.setStatus(ticket.getStatus());
+        dto.setUserId(ticket.getUserId());
         
         return dto;
     }
@@ -34,7 +35,7 @@ public class TicketMapper {
             return null;
         }
         
-        return new Ticket(
+        Ticket ticket = new Ticket(
             dto.getEventId(),
             dto.getType(),
             dto.getPrice(),
@@ -43,6 +44,12 @@ public class TicketMapper {
             dto.getSaleStart(),
             dto.getSaleEnd()
         );
+        
+        if (dto.getUserId() != null) {
+            ticket.setUserId(dto.getUserId());
+        }
+        
+        return ticket;
     }
     
     public void updateEntityFromDto(TicketUpdateDto dto, Ticket ticket) {

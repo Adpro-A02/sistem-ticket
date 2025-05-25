@@ -1,27 +1,58 @@
 package id.ac.ui.cs.advprog.sistemticket.model;
 
 import id.ac.ui.cs.advprog.sistemticket.enums.TicketStatus;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Column;
+import jakarta.persistence.PrePersist;
+
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+@Entity
+@Table(name = "tickets")
 public class Ticket {
     // Valid ticket types
     private static final Set<String> VALID_TYPES = new HashSet<>(
         Arrays.asList("REGULAR", "VIP")
     );
     
+    @Id
     private String id;
+    
+    @Column(nullable = false)
     private String eventId;
+    
+    @Column(nullable = false)
     private String type;
+    
+    @Column(nullable = false)
     private Double price;
+    
+    @Column(nullable = false)
     private Integer quota;
+    
+    @Column(nullable = false)
     private Integer remainingQuota;
+    
+    @Column(columnDefinition = "TEXT")
     private String description;
+    
+    @Column(nullable = false)
     private Long saleStart;
+    
+    @Column(nullable = false)
     private Long saleEnd;
+    
+    @Column(nullable = false)
     private String status;
+    
+    @Column
+    private String userId;
     
     // Default constructor
     public Ticket() {
@@ -58,6 +89,19 @@ public class Ticket {
         
         validateStatus(status);
         this.status = status;
+    }
+    
+    @PrePersist
+    public void prePersist() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID().toString();
+        }
+        if (this.status == null) {
+            this.status = TicketStatus.AVAILABLE.getValue();
+        }
+        if (this.remainingQuota == null) {
+            this.remainingQuota = this.quota;
+        }
     }
     
     // Validation methods
@@ -201,5 +245,14 @@ public class Ticket {
     public void setStatus(String status) {
         validateStatus(status);
         this.status = status;
+    }
+    
+    // Getters and setters for userId
+    public String getUserId() {
+        return userId;
+    }
+    
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 }

@@ -11,6 +11,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import jakarta.validation.Valid;
 import java.util.ArrayList;
@@ -30,6 +33,7 @@ public class TicketController {
     @Autowired
     private TicketMapper ticketMapper;
     
+    // Read operations - accessible to all
     @GetMapping
     public ResponseEntity<List<TicketDto>> getAllTickets() {
         List<Ticket> tickets = ticketService.findAll();
@@ -59,7 +63,6 @@ public class TicketController {
     
     @GetMapping("/available")
     public ResponseEntity<List<TicketDto>> getAvailableTickets() {
-        // Use current time to find available tickets
         Long currentTime = System.currentTimeMillis();
         List<Ticket> tickets = ticketService.findAllAvailable(currentTime);
         List<TicketDto> ticketDtos = tickets.stream()
@@ -68,7 +71,9 @@ public class TicketController {
         return ResponseEntity.ok(ticketDtos);
     }
     
+    // Create operations - only for Organizer
     @PostMapping
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<TicketDto> createTicket(@Valid @RequestBody TicketCreationDto ticketDto) {
         Ticket ticket = ticketMapper.toEntity(ticketDto);
         Ticket createdTicket = ticketService.createTicket(ticket);
@@ -78,7 +83,9 @@ public class TicketController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ticketMapper.toDto(createdTicket));
     }
     
+    // Update operations
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<TicketDto> updateTicket(@PathVariable String id, 
                                                @Valid @RequestBody TicketUpdateDto ticketDto) {
         try {
@@ -96,7 +103,9 @@ public class TicketController {
         }
     }
     
+    // Status update - only for Admin and Organizer
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
     public ResponseEntity<TicketDto> updateTicketStatus(@PathVariable String id, 
                                                      @Valid @RequestBody StatusUpdateDto statusDto) {
         try {
@@ -109,11 +118,12 @@ public class TicketController {
         }
     }
     
+    // Purchase operations - only for Attendee
     @PostMapping("/{id}/purchase")
+    @PreAuthorize("hasAnyRole('ATTENDEE', 'ADMIN')")
     public ResponseEntity<TicketDto> purchaseTicket(@PathVariable String id, 
                                                  @Valid @RequestBody TicketPurchaseDto purchaseDto) {
         try {
-            // Use provided timestamp or current time
             Long timestamp = purchaseDto.getTimestamp() != null ? 
                     purchaseDto.getTimestamp() : System.currentTimeMillis();
                     
@@ -126,7 +136,9 @@ public class TicketController {
         }
     }
     
+    // Validate operations - only for Admin and Organizer
     @PostMapping("/{id}/validate")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
     public ResponseEntity<TicketDto> validateTicket(@PathVariable String id) {
         try {
             Ticket validatedTicket = ticketService.updateStatus(id, TicketStatus.USED.getValue());
@@ -138,9 +150,24 @@ public class TicketController {
         }
     }
     
+    // Delete operations - only for Admin and Organizer
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
     public ResponseEntity<Void> deleteTicket(@PathVariable String id) {
         try {
+            // Get the ticket first to check if it can be deleted
+            Ticket ticket = ticketService.findById(id);
+            if (ticket == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Check if any tickets have been purchased
+            if (ticket.getRemainingQuota() < ticket.getQuota()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .header("X-Error-Message", "Cannot delete tickets that have been purchased")
+                        .build();
+            }
+            
             ticketService.deleteTicket(id);
             return ResponseEntity.noContent().build();
         } catch (NoSuchElementException e) {
@@ -148,7 +175,9 @@ public class TicketController {
         }
     }
     
+    // Batch operations - only for Organizer
     @PostMapping("/batch")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public CompletableFuture<ResponseEntity<List<TicketDto>>> createTicketsBatch(
             @Valid @RequestBody List<TicketCreationDto> ticketDtos) {
         return CompletableFuture.supplyAsync(() -> {
@@ -167,6 +196,7 @@ public class TicketController {
     }
     
     @PostMapping("/{id}/expire-async")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> processExpirationAsync(@PathVariable String id) {
         ticketService.processTicketExpiration(id);
         return ResponseEntity.accepted().body("Expiration process started for ticket: " + id);

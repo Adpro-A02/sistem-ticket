@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -24,16 +25,15 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     public Ticket createTicket(Ticket ticket) {
-        if (ticketRepository.findById(ticket.getId()) == null) {
-            ticketRepository.save(ticket);
-            return ticket;
+        if (ticketRepository.findById(ticket.getId()).isPresent()) {
+            return null;
         }
-        return null;
+        return ticketRepository.save(ticket);
     }
     
     @Override
     public Ticket findById(String id) {
-        return ticketRepository.findById(id);
+        return ticketRepository.findById(id).orElse(null);
     }
     
     @Override
@@ -58,8 +58,8 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     public Ticket updateTicket(Ticket ticket) {
-        Ticket existingTicket = ticketRepository.findById(ticket.getId());
-        if (existingTicket == null) {
+        Optional<Ticket> existingTicket = ticketRepository.findById(ticket.getId());
+        if (existingTicket.isEmpty()) {
             throw new NoSuchElementException("Ticket with ID " + ticket.getId() + " not found");
         }
         
@@ -69,10 +69,12 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     public Ticket updateStatus(String id, String status) {
-        Ticket ticket = ticketRepository.findById(id);
-        if (ticket == null) {
+        Optional<Ticket> optionalTicket = ticketRepository.findById(id);
+        if (optionalTicket.isEmpty()) {
             throw new NoSuchElementException("Ticket with ID " + id + " not found");
         }
+        
+        Ticket ticket = optionalTicket.get();
         
         // Validate the status
         if (!TicketStatus.contains(status)) {
@@ -85,10 +87,12 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     public Ticket purchaseTicket(String id, int amount, Long currentTime) {
-        Ticket ticket = ticketRepository.findById(id);
-        if (ticket == null) {
+        Optional<Ticket> optionalTicket = ticketRepository.findById(id);
+        if (optionalTicket.isEmpty()) {
             throw new NoSuchElementException("Ticket with ID " + id + " not found");
         }
+        
+        Ticket ticket = optionalTicket.get();
         
         // Check if ticket is available for purchase
         if (!ticket.isAvailableForPurchase(currentTime)) {
@@ -114,8 +118,8 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     public void deleteTicket(String id) {
-        Ticket ticket = ticketRepository.findById(id);
-        if (ticket == null) {
+        Optional<Ticket> optionalTicket = ticketRepository.findById(id);
+        if (optionalTicket.isEmpty()) {
             throw new NoSuchElementException("Ticket with ID " + id + " not found");
         }
         
@@ -125,8 +129,9 @@ public class TicketServiceImpl implements TicketService {
     @Async("taskExecutor")
     public CompletableFuture<Void> processTicketExpiration(String ticketId) {
         return CompletableFuture.runAsync(() -> {
-            Ticket ticket = ticketRepository.findById(ticketId);
-            if (ticket != null && ticket.getSaleEnd() < System.currentTimeMillis()) {
+            Optional<Ticket> optionalTicket = ticketRepository.findById(ticketId);
+            if (optionalTicket.isPresent() && optionalTicket.get().getSaleEnd() < System.currentTimeMillis()) {
+                Ticket ticket = optionalTicket.get();
                 ticket.setStatus(TicketStatus.EXPIRED.getValue());
                 ticketRepository.save(ticket);
             }

@@ -13,6 +13,7 @@ public class TicketDto implements Serializable {
     private Long saleStart;
     private Long saleEnd;
     private String status;
+    private String userId;
     
     // Getters and setters
     public String getId() {
@@ -93,5 +94,13 @@ public class TicketDto implements Serializable {
     
     public void setStatus(String status) {
         this.status = status;
+    }
+    
+    public String getUserId() {
+        return userId;
+    }
+    
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 }
