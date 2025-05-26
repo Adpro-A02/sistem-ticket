@@ -21,6 +21,12 @@ public class SistemTicketApplication {
                 if (entry.getKey().equals("CORS_ALLOWED_ORIGIN")) {
                     System.setProperty("cors.allowed.origin", entry.getValue());
                 }
+                if (entry.getKey().equals("DB_USERNAME")) {
+                    System.setProperty("spring.datasource.username", entry.getValue());
+                }
+                if (entry.getKey().equals("DB_PASSWORD")) {
+                    System.setProperty("spring.datasource.password", entry.getValue());
+                }
             });
             
             // Print environment variables for debugging
@@ -33,6 +39,12 @@ public class SistemTicketApplication {
             // Log error but continue startup
             System.err.println("Warning: Failed to load environment variables: " + e.getMessage());
         }
+
+        // Force set critical properties for database connection
+        System.setProperty("spring.datasource.username", "EventSphere_owner");
+        System.setProperty("spring.datasource.password", "npg_2QiwmupIb7UX");
+        System.out.println("Forced spring.datasource.username = EventSphere_owner");
+        System.out.println("Forced spring.datasource.password is set = true");
 
         SpringApplication.run(SistemTicketApplication.class, args);
     }
