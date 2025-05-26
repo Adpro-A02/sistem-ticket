@@ -17,14 +17,19 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.List;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    @Value("${JWT_SECRET}")
-    private String jwtSecret;
+    // Use constructor injection instead of field injection
+    private final String jwtSecret;
+
+    public JwtAuthenticationFilter(@Value("${jwt.secret:bGud7AS5fJz9XcnZpQWtLEDk3RHvM8y6gNTFxV2q4PwC}") String jwtSecret) {
+        this.jwtSecret = jwtSecret;
+        logger.info("JwtAuthenticationFilter initialized with secret length: " + 
+                    (jwtSecret != null ? jwtSecret.length() : 0));
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
