@@ -40,11 +40,14 @@ public class SistemTicketApplication {
             System.err.println("Warning: Failed to load environment variables: " + e.getMessage());
         }
 
-        // Force set critical properties for database connection
+        // Force set critical properties for database connection and server port
         System.setProperty("spring.datasource.username", "EventSphere_owner");
         System.setProperty("spring.datasource.password", "npg_2QiwmupIb7UX");
+        System.setProperty("server.port", "8000");
+        
         System.out.println("Forced spring.datasource.username = EventSphere_owner");
         System.out.println("Forced spring.datasource.password is set = true");
+        System.out.println("Forced server.port = 8000");
 
         SpringApplication.run(SistemTicketApplication.class, args);
     }
