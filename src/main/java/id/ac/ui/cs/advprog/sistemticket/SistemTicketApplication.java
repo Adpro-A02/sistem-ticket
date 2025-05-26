@@ -22,6 +22,13 @@ public class SistemTicketApplication {
                     System.setProperty("cors.allowed.origin", entry.getValue());
                 }
             });
+            
+            // Print environment variables for debugging
+            System.out.println("Database username: " + System.getProperty("DB_USERNAME", "not set from env"));
+            System.out.println("Database password is set: " + (System.getProperty("DB_PASSWORD") != null));
+            System.out.println("JWT_SECRET is set: " + (System.getProperty("JWT_SECRET") != null));
+            System.out.println("CORS_ALLOWED_ORIGIN: " + System.getProperty("CORS_ALLOWED_ORIGIN", "not set from env"));
+            
         } catch (Exception e) {
             // Log error but continue startup
             System.err.println("Warning: Failed to load environment variables: " + e.getMessage());
