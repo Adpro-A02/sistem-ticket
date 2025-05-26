@@ -29,7 +29,7 @@ jobs:
           api-token: ${{ secrets.KOYEB_API_TOKEN }}
           app-name: sistem-ticket
           service-name: api-service
-          service-ports: 8080:http
+          service-ports: 8000:http
           service-env: |
             DB_USERNAME=EventSphere_owner
             DB_PASSWORD=npg_2QiwmupIb7UX
