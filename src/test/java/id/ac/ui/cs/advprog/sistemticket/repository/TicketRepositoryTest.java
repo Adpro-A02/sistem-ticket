@@ -99,7 +99,10 @@ class TicketRepositoryTest {
         ticket.setRemainingQuota(ticket.getRemainingQuota() - 10);
         
         Ticket result = ticketRepository.save(ticket);
-        Ticket findResult = ticketRepository.findById(ticket.getId());
+        Optional<Ticket> findResultOptional = ticketRepository.findById(ticket.getId());
+        
+        assertTrue(findResultOptional.isPresent());
+        Ticket findResult = findResultOptional.get();
         
         assertEquals(ticket.getId(), result.getId());
         assertEquals(ticket.getId(), findResult.getId());
@@ -109,20 +112,25 @@ class TicketRepositoryTest {
     
     @Test
     void testFindByIdIfIdFound() {
-        ticketRepository.save(ticket1);
+        Ticket saved = ticketRepository.save(ticket1);
+        ticketRepository.save(ticket2);
         
-        Ticket findResult = ticketRepository.findById(ticket2.getId());
-        assertEquals(ticket2.getId(), findResult.getId());
-        assertEquals(ticket2.getEventId(), findResult.getEventId());
-        assertEquals(ticket2.getType(), findResult.getType());
+        Optional<Ticket> findResultOptional = ticketRepository.findById(saved.getId());
+        
+        assertTrue(findResultOptional.isPresent());
+        Ticket findResult = findResultOptional.get();
+        
+        assertEquals(saved.getId(), findResult.getId());
+        assertEquals(saved.getEventId(), findResult.getEventId());
+        assertEquals(saved.getType(), findResult.getType());
     }
     
     @Test
     void testFindByIdIfIdNotFound() {
         ticketRepository.save(ticket1);
         
-        Ticket findResult = ticketRepository.findById("non-existent-id");
-        assertNull(findResult);
+        Optional<Ticket> findResultOptional = ticketRepository.findById("non-existent-id");
+        assertFalse(findResultOptional.isPresent());
     }
     
     @Test
@@ -191,9 +199,9 @@ class TicketRepositoryTest {
         ticketRepository.save(ticket);
         
         // Set another ticket to PURCHASED status
-        Ticket ticket2 = ticket2;
-        ticket2.setStatus(TicketStatus.PURCHASED.getValue());
-        ticketRepository.save(ticket2);
+        Ticket ticket2Clone = ticket2;
+        ticket2Clone.setStatus(TicketStatus.PURCHASED.getValue());
+        ticketRepository.save(ticket2Clone);
         
         // Find available tickets (AVAILABLE status and remaining quota > 0)
         List<Ticket> availableTickets = ticketRepository.findAllAvailable(currentTime + 1000);
@@ -220,13 +228,13 @@ class TicketRepositoryTest {
         String idToDelete = ticket1.getId();
         
         // Verify ticket exists
-        assertNotNull(ticketRepository.findById(idToDelete));
+        assertTrue(ticketRepository.findById(idToDelete).isPresent());
         
         // Delete the ticket
         ticketRepository.deleteById(idToDelete);
         
         // Verify ticket no longer exists
-        assertNull(ticketRepository.findById(idToDelete));
+        assertFalse(ticketRepository.findById(idToDelete).isPresent());
         
         // Verify other tickets still exist
         List<Ticket> allTickets = ticketRepository.findAll();
