@@ -23,7 +23,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    @Value("${CORS_ALLOWED_ORIGIN:http://localhost:3000}")
+    @Value("${cors.allowed.origin:http://localhost:3000}")
     private String allowedOrigin;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
