@@ -9,6 +9,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.annotation.Timed;
+
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -23,12 +27,27 @@ public class TicketServiceImpl implements TicketService {
     @Autowired
     private ApplicationEventPublisher eventPublisher;
     
+    @Autowired
+    private Counter ticketCreatedCounter;
+    
+    @Autowired
+    private Counter ticketPurchasedCounter;
+    
+    @Autowired
+    private Timer ticketPurchaseTimer;
+    
+    @Autowired
+    private Counter ticketStatusUpdateCounter;
+    
     @Override
+    @Timed(value = "ticket.create.time", description = "Time taken to create a ticket")
     public Ticket createTicket(Ticket ticket) {
         if (ticketRepository.findById(ticket.getId()).isPresent()) {
             return null;
         }
-        return ticketRepository.save(ticket);
+        Ticket createdTicket = ticketRepository.save(ticket);
+        ticketCreatedCounter.increment();
+        return createdTicket;
     }
     
     @Override
@@ -69,6 +88,7 @@ public class TicketServiceImpl implements TicketService {
     }
     
     @Override
+    @Timed(value = "ticket.update.status.time", description = "Time taken to update ticket status")
     public Ticket updateStatus(String id, String status) {
         Optional<Ticket> optionalTicket = ticketRepository.findById(id);
         if (optionalTicket.isEmpty()) {
@@ -83,38 +103,45 @@ public class TicketServiceImpl implements TicketService {
         }
         
         ticket.setStatus(status);
+        ticketStatusUpdateCounter.increment();
         return ticketRepository.save(ticket);
     }
     
     @Override
+    @Timed(value = "ticket.purchase.time", description = "Time taken to purchase a ticket")
     public Ticket purchaseTicket(String id, int amount, Long currentTime) {
-        Optional<Ticket> optionalTicket = ticketRepository.findById(id);
-        if (optionalTicket.isEmpty()) {
-            throw new NoSuchElementException("Ticket with ID " + id + " not found");
-        }
-        
-        Ticket ticket = optionalTicket.get();
-        
-        // Check if ticket is available for purchase
-        if (!ticket.isAvailableForPurchase(currentTime)) {
-            throw new IllegalArgumentException("Ticket is not available for purchase at this time");
-        }
-        
-        // Try to decrease the quota
-        try {
-            ticket.decreaseRemainingQuota(amount);
-        } catch (IllegalArgumentException e) {
-            // Rethrow with additional context if needed
-            throw new IllegalArgumentException("Cannot purchase tickets: " + e.getMessage());
-        }
-        
-        // Save and return the updated ticket
-        Ticket updatedTicket = ticketRepository.save(ticket);
-        
-        // Publish event for asynchronous processing
-        eventPublisher.publishEvent(new TicketPurchasedEvent(updatedTicket, amount));
-        
-        return updatedTicket;
+        return ticketPurchaseTimer.record(() -> {
+            Optional<Ticket> optionalTicket = ticketRepository.findById(id);
+            if (optionalTicket.isEmpty()) {
+                throw new NoSuchElementException("Ticket with ID " + id + " not found");
+            }
+            
+            Ticket ticket = optionalTicket.get();
+            
+            // Check if ticket is available for purchase
+            if (!ticket.isAvailableForPurchase(currentTime)) {
+                throw new IllegalArgumentException("Ticket is not available for purchase at this time");
+            }
+            
+            // Try to decrease the quota
+            try {
+                ticket.decreaseRemainingQuota(amount);
+            } catch (IllegalArgumentException e) {
+                // Rethrow with additional context if needed
+                throw new IllegalArgumentException("Cannot purchase tickets: " + e.getMessage());
+            }
+            
+            // Save and return the updated ticket
+            Ticket updatedTicket = ticketRepository.save(ticket);
+            
+            // Publish event for asynchronous processing
+            eventPublisher.publishEvent(new TicketPurchasedEvent(updatedTicket, amount));
+            
+            // Increment the counter by the amount of tickets purchased
+            ticketPurchasedCounter.increment(amount);
+            
+            return updatedTicket;
+        });
     }
     
     @Override
