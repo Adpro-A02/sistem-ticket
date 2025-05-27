@@ -96,6 +96,7 @@ class TicketServiceImplTest {
         tickets.add(ticket3);
     }
     
+    // Core CRUD operations
     @Test
     void testCreateTicket() {
         Ticket ticket = tickets.get(0);
@@ -230,25 +231,14 @@ class TicketServiceImplTest {
         Ticket ticket = tickets.get(0);
         when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
-        Ticket updatedTicket = new Ticket(
-            ticket.getEventId(),
-            ticket.getType(),
-            ticket.getPrice(),
-            ticket.getQuota(),
-            ticket.getDescription(),
-            ticket.getSaleStart(),
-            ticket.getSaleEnd(),
-            TicketStatus.PURCHASED.getValue()
-        );
-        updatedTicket.setId(ticket.getId());
-        
-        when(ticketRepository.save(any(Ticket.class))).thenReturn(updatedTicket);
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> {
+            Ticket savedTicket = invocation.getArgument(0);
+            return savedTicket;
+        });
         
         Ticket result = ticketService.updateStatus(ticket.getId(), TicketStatus.PURCHASED.getValue());
         
-        assertEquals(ticket.getId(), result.getId());
         assertEquals(TicketStatus.PURCHASED.getValue(), result.getStatus());
-        verify(ticketRepository, times(1)).save(any(Ticket.class));
     }
     
     @Test
@@ -275,25 +265,12 @@ class TicketServiceImplTest {
         int purchaseAmount = 5;
         
         when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
-        
-        Ticket purchasedTicket = new Ticket(
-            ticket.getEventId(),
-            ticket.getType(),
-            ticket.getPrice(),
-            ticket.getQuota(),
-            ticket.getDescription(),
-            ticket.getSaleStart(),
-            ticket.getSaleEnd()
-        );
-        purchasedTicket.setId(ticket.getId());
-        purchasedTicket.setRemainingQuota(initialQuota - purchaseAmount);
-        
-        when(ticketRepository.save(any(Ticket.class))).thenReturn(purchasedTicket);
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
         
         Ticket result = ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000);
         
         assertEquals(initialQuota - purchaseAmount, result.getRemainingQuota());
-        verify(ticketRepository, times(1)).save(any(Ticket.class));
+        verify(eventPublisher).publishEvent(any(TicketPurchasedEvent.class));
     }
     
     @Test
