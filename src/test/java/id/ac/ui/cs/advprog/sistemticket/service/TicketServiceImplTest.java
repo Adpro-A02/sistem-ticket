@@ -13,6 +13,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -38,6 +40,9 @@ class TicketServiceImplTest {
     
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    
+    @Captor
+    private ArgumentCaptor<TicketPurchasedEvent> eventCaptor;
     
     private List<Ticket> tickets;
     private String eventId1;
@@ -91,6 +96,7 @@ class TicketServiceImplTest {
         tickets.add(ticket3);
     }
     
+    // Core CRUD operations
     @Test
     void testCreateTicket() {
         Ticket ticket = tickets.get(0);
@@ -201,8 +207,8 @@ class TicketServiceImplTest {
         );
         updatedTicket.setId(originalTicket.getId()); // Ensure same ID
         
-        doReturn(originalTicket).when(ticketRepository).findById(originalTicket.getId());
-        doReturn(updatedTicket).when(ticketRepository).save(any(Ticket.class));
+        when(ticketRepository.findById(originalTicket.getId())).thenReturn(Optional.of(originalTicket));
+        when(ticketRepository.save(any(Ticket.class))).thenReturn(updatedTicket);
         
         Ticket result = ticketService.updateTicket(updatedTicket);
         
@@ -214,41 +220,31 @@ class TicketServiceImplTest {
     @Test
     void testUpdateTicketNotFound() {
         Ticket ticket = tickets.get(0);
-        doReturn(null).when(ticketRepository).findById(ticket.getId());
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.empty());
         
         assertThrows(NoSuchElementException.class, () -> ticketService.updateTicket(ticket));
+        verify(ticketRepository, times(0)).save(any(Ticket.class));
     }
     
     @Test
     void testUpdateTicketStatus() {
         Ticket ticket = tickets.get(0);
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
-        Ticket updatedTicket = new Ticket(
-            ticket.getEventId(),
-            ticket.getType(),
-            ticket.getPrice(),
-            ticket.getQuota(),
-            ticket.getDescription(),
-            ticket.getSaleStart(),
-            ticket.getSaleEnd(),
-            TicketStatus.PURCHASED.getValue()
-        );
-        updatedTicket.setId(ticket.getId());
-        
-        doReturn(updatedTicket).when(ticketRepository).save(any(Ticket.class));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> {
+            Ticket savedTicket = invocation.getArgument(0);
+            return savedTicket;
+        });
         
         Ticket result = ticketService.updateStatus(ticket.getId(), TicketStatus.PURCHASED.getValue());
         
-        assertEquals(ticket.getId(), result.getId());
         assertEquals(TicketStatus.PURCHASED.getValue(), result.getStatus());
-        verify(ticketRepository, times(1)).save(any(Ticket.class));
     }
     
     @Test
     void testUpdateTicketStatusInvalidStatus() {
         Ticket ticket = tickets.get(0);
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
         assertThrows(IllegalArgumentException.class, () -> ticketService.updateStatus(ticket.getId(), "INVALID_STATUS"));
         verify(ticketRepository, times(0)).save(any(Ticket.class));
@@ -256,7 +252,7 @@ class TicketServiceImplTest {
     
     @Test
     void testUpdateTicketStatusNotFound() {
-        doReturn(null).when(ticketRepository).findById("non-existent-id");
+        when(ticketRepository.findById("non-existent-id")).thenReturn(Optional.empty());
         
         assertThrows(NoSuchElementException.class, () -> ticketService.updateStatus("non-existent-id", TicketStatus.PURCHASED.getValue()));
         verify(ticketRepository, times(0)).save(any(Ticket.class));
@@ -268,26 +264,13 @@ class TicketServiceImplTest {
         int initialQuota = ticket.getRemainingQuota();
         int purchaseAmount = 5;
         
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
-        
-        Ticket purchasedTicket = new Ticket(
-            ticket.getEventId(),
-            ticket.getType(),
-            ticket.getPrice(),
-            ticket.getQuota(),
-            ticket.getDescription(),
-            ticket.getSaleStart(),
-            ticket.getSaleEnd()
-        );
-        purchasedTicket.setId(ticket.getId());
-        purchasedTicket.setRemainingQuota(initialQuota - purchaseAmount);
-        
-        doReturn(purchasedTicket).when(ticketRepository).save(any(Ticket.class));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
         
         Ticket result = ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000);
         
         assertEquals(initialQuota - purchaseAmount, result.getRemainingQuota());
-        verify(ticketRepository, times(1)).save(any(Ticket.class));
+        verify(eventPublisher).publishEvent(any(TicketPurchasedEvent.class));
     }
     
     @Test
@@ -295,7 +278,7 @@ class TicketServiceImplTest {
         Ticket ticket = tickets.get(0);
         int purchaseAmount = ticket.getRemainingQuota() + 1; // One more than available
         
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
         assertThrows(IllegalArgumentException.class, () -> ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000));
         verify(ticketRepository, times(0)).save(any(Ticket.class));
@@ -306,7 +289,7 @@ class TicketServiceImplTest {
         Ticket ticket = tickets.get(0);
         Long invalidTime = ticket.getSaleEnd() + 1000; // After sale period
         
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
         assertThrows(IllegalArgumentException.class, () -> ticketService.purchaseTicket(ticket.getId(), 1, invalidTime));
         verify(ticketRepository, times(0)).save(any(Ticket.class));
@@ -317,7 +300,7 @@ class TicketServiceImplTest {
         Ticket ticket = tickets.get(0);
         ticket.setStatus(TicketStatus.PURCHASED.getValue()); // Set to non-available status
         
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
         assertThrows(IllegalArgumentException.class, () -> ticketService.purchaseTicket(ticket.getId(), 1, currentTime + 1000));
         verify(ticketRepository, times(0)).save(any(Ticket.class));
@@ -326,7 +309,7 @@ class TicketServiceImplTest {
     @Test
     void testDeleteTicket() {
         String ticketId = tickets.get(0).getId();
-        doReturn(tickets.get(0)).when(ticketRepository).findById(ticketId);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(tickets.get(0)));
         
         ticketService.deleteTicket(ticketId);
         
@@ -336,7 +319,7 @@ class TicketServiceImplTest {
     @Test
     void testDeleteTicketNotFound() {
         String ticketId = "non-existent-id";
-        doReturn(null).when(ticketRepository).findById(ticketId);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.empty());
         
         assertThrows(NoSuchElementException.class, () -> ticketService.deleteTicket(ticketId));
         verify(ticketRepository, times(0)).deleteById(ticketId);
@@ -348,49 +331,59 @@ class TicketServiceImplTest {
         Ticket ticket = tickets.get(0);
         int purchaseAmount = 5;
         
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
-        doReturn(ticket).when(ticketRepository).save(any(Ticket.class));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenReturn(ticket);
         
         // Execute
         ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000);
         
-        // Fix: Use a more generic argument matcher instead of trying to cast to TicketPurchasedEvent
-        verify(eventPublisher, times(1)).publishEvent(any());
+        // Use ArgumentCaptor to capture and verify the event
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        
+        // Verify the captured event
+        TicketPurchasedEvent capturedEvent = eventCaptor.getValue();
+        assertNotNull(capturedEvent);
+        assertEquals(ticket, capturedEvent.getTicket());
+        assertEquals(purchaseAmount, capturedEvent.getAmount());
     }
     
     @Test
     void testProcessTicketExpiration() throws ExecutionException, InterruptedException {
         // Setup
         Ticket ticket = tickets.get(0);
-        Long expiredTime = System.currentTimeMillis() + 1000000; // time in the future
-        ticket.setSaleEnd(expiredTime - 2000000); // sale ended before current time
-        
-        doReturn(ticket).when(ticketRepository).findById(ticket.getId());
-        doReturn(ticket).when(ticketRepository).save(any(Ticket.class));
-        
+        String ticketId = ticket.getId();
+
+        // Set the sale end time to be in the past
+        ticket.setSaleEnd(System.currentTimeMillis() - 10000); // 10 seconds in the past
+
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenReturn(ticket);
+
         // Execute
-        CompletableFuture<Void> future = ticketService.processTicketExpiration(ticket.getId());
-        
+        CompletableFuture<Void> future = ticketService.processTicketExpiration(ticketId);
+
         // Wait for completion and verify
         future.get(); // This will wait for the async operation to complete
-        
-        verify(ticketRepository, times(1)).findById(ticket.getId());
-        verify(ticketRepository, times(1)).save(any(Ticket.class));
+
+        // Verify the ticket status was updated to EXPIRED
+        verify(ticketRepository).save(argThat(savedTicket ->
+            savedTicket.getStatus().equals(TicketStatus.EXPIRED.getValue())));
     }
-    
+
     @Test
     void testProcessTicketExpirationNoTicket() throws ExecutionException, InterruptedException {
         // Setup
         String nonExistentId = "non-existent";
-        doReturn(null).when(ticketRepository).findById(nonExistentId);
-        
+        when(ticketRepository.findById(nonExistentId)).thenReturn(Optional.empty());
+
         // Execute
         CompletableFuture<Void> future = ticketService.processTicketExpiration(nonExistentId);
-        
+
         // Wait for completion and verify
         future.get(); // This will wait for the async operation to complete
-        
-        verify(ticketRepository, times(1)).findById(nonExistentId);
-        verify(ticketRepository, times(0)).save(any(Ticket.class));
+
+        verify(ticketRepository).findById(nonExistentId);
+        verify(ticketRepository, never()).save(any(Ticket.class));
     }
 }
+

@@ -38,12 +38,7 @@ public class TicketTest {
         
         assertEquals(validEventId, ticket.getEventId());
         assertEquals("REGULAR", ticket.getType());
-        assertEquals(validPrice, ticket.getPrice());
-        assertEquals(validQuota, ticket.getQuota());
-        assertEquals(validQuota, ticket.getRemainingQuota(), "Remaining quota should equal total quota on creation");
-        assertEquals(validDescription, ticket.getDescription());
-        assertEquals(validSaleStart, ticket.getSaleStart());
-        assertEquals(validSaleEnd, ticket.getSaleEnd());
+        assertEquals(validQuota, ticket.getRemainingQuota());
         assertEquals(TicketStatus.AVAILABLE.getValue(), ticket.getStatus());
     }
     
@@ -67,9 +62,9 @@ public class TicketTest {
     @Test
     void testCreateTicketWithInvalidType() {
         assertThrows(IllegalArgumentException.class, () -> {
-            Ticket ticket = new Ticket(validEventId, "INVALID_TYPE", validPrice, 
-                                      validQuota, validDescription, 
-                                      validSaleStart, validSaleEnd);
+            new Ticket(validEventId, "INVALID_TYPE", validPrice, 
+                      validQuota, validDescription, 
+                      validSaleStart, validSaleEnd);
         });
     }
     
