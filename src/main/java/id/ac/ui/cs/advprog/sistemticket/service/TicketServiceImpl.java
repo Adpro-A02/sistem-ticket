@@ -46,7 +46,9 @@ public class TicketServiceImpl implements TicketService {
             return null;
         }
         Ticket createdTicket = ticketRepository.save(ticket);
-        ticketCreatedCounter.increment();
+        if (ticketCreatedCounter != null) {
+            ticketCreatedCounter.increment();
+        }
         return createdTicket;
     }
     
@@ -103,45 +105,60 @@ public class TicketServiceImpl implements TicketService {
         }
         
         ticket.setStatus(status);
-        ticketStatusUpdateCounter.increment();
+        if (ticketStatusUpdateCounter != null) {
+            ticketStatusUpdateCounter.increment();
+        }
         return ticketRepository.save(ticket);
     }
     
     @Override
     @Timed(value = "ticket.purchase.time", description = "Time taken to purchase a ticket")
     public Ticket purchaseTicket(String id, int amount, Long currentTime) {
-        return ticketPurchaseTimer.record(() -> {
-            Optional<Ticket> optionalTicket = ticketRepository.findById(id);
-            if (optionalTicket.isEmpty()) {
-                throw new NoSuchElementException("Ticket with ID " + id + " not found");
-            }
-            
-            Ticket ticket = optionalTicket.get();
-            
-            // Check if ticket is available for purchase
-            if (!ticket.isAvailableForPurchase(currentTime)) {
-                throw new IllegalArgumentException("Ticket is not available for purchase at this time");
-            }
-            
-            // Try to decrease the quota
-            try {
-                ticket.decreaseRemainingQuota(amount);
-            } catch (IllegalArgumentException e) {
-                // Rethrow with additional context if needed
-                throw new IllegalArgumentException("Cannot purchase tickets: " + e.getMessage());
-            }
-            
-            // Save and return the updated ticket
-            Ticket updatedTicket = ticketRepository.save(ticket);
-            
-            // Publish event for asynchronous processing
-            eventPublisher.publishEvent(new TicketPurchasedEvent(updatedTicket, amount));
-            
-            // Increment the counter by the amount of tickets purchased
+        if (ticketPurchaseTimer != null) {
+            return ticketPurchaseTimer.record(() -> purchaseTicketInternal(id, amount, currentTime));
+        } else {
+            return purchaseTicketInternal(id, amount, currentTime);
+        }
+    }
+
+    private Ticket purchaseTicketInternal(String id, int amount, Long currentTime) {
+        // Add validation for amount
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Purchase amount must be positive");
+        }
+        
+        Optional<Ticket> optionalTicket = ticketRepository.findById(id);
+        if (optionalTicket.isEmpty()) {
+            throw new NoSuchElementException("Ticket with ID " + id + " not found");
+        }
+        
+        Ticket ticket = optionalTicket.get();
+        
+        // Check if ticket is available for purchase
+        if (!ticket.isAvailableForPurchase(currentTime)) {
+            throw new IllegalArgumentException("Ticket is not available for purchase at this time");
+        }
+        
+        // Try to decrease the quota
+        try {
+            ticket.decreaseRemainingQuota(amount);
+        } catch (IllegalArgumentException e) {
+            // Rethrow with additional context if needed
+            throw new IllegalArgumentException("Cannot purchase tickets: " + e.getMessage());
+        }
+        
+        // Save and return the updated ticket
+        Ticket updatedTicket = ticketRepository.save(ticket);
+        
+        // Publish event for asynchronous processing
+        eventPublisher.publishEvent(new TicketPurchasedEvent(updatedTicket, amount));
+        
+        // Increment the counter by the amount of tickets purchased
+        if (ticketPurchasedCounter != null) {
             ticketPurchasedCounter.increment(amount);
-            
-            return updatedTicket;
-        });
+        }
+        
+        return updatedTicket;
     }
     
     @Override
@@ -158,7 +175,7 @@ public class TicketServiceImpl implements TicketService {
     public CompletableFuture<Void> processTicketExpiration(String ticketId) {
         return CompletableFuture.runAsync(() -> {
             Optional<Ticket> optionalTicket = ticketRepository.findById(ticketId);
-            if (optionalTicket.isPresent() && optionalTicket.get().getSaleEnd() < System.currentTimeMillis()) {
+            if (optionalTicket.isPresent() && optionalTicket.get().getSaleEnd() <= System.currentTimeMillis()) {
                 Ticket ticket = optionalTicket.get();
                 ticket.setStatus(TicketStatus.EXPIRED.getValue());
                 ticketRepository.save(ticket);

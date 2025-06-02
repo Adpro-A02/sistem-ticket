@@ -9,7 +9,6 @@ public class TicketPurchaseDto implements Serializable {
     @Min(value = 1, message = "Amount must be at least 1")
     private Integer amount;
     
-    // Optional - can be used to override current time for testing
     private Long timestamp;
     
     public Integer getAmount() {

@@ -2,6 +2,7 @@ plugins {
     java
     id("org.springframework.boot") version "3.4.5"
     id("io.spring.dependency-management") version "1.1.7"
+    id("jacoco")
 }
 
 group = "id.ac.ui.cs.advprog"
@@ -42,9 +43,73 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
-    implementation("io.micrometer:micrometer-core")
+    testImplementation("com.h2database:h2")
+    testImplementation("org.springframework.security:spring-security-test")
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
+    
+    // Remove the problematic jvmArgs configuration
+    systemProperty("spring.profiles.active", "test")
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+    executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")).include("**/*.exec"))
+
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it).apply {
+                exclude(
+                    "**/config/**",
+                    "**/dto/**",
+                    "**/enums/**",
+                    "**/*Application*",
+                    "**/exception/**"
+                )
+            }
+        })
+    )
+}
+
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
+    violationRules {
+        rule {
+            limit {
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+        rule {
+            enabled = true
+            element = "CLASS"
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.75".toBigDecimal()
+            }
+            excludes = listOf(
+                "*.config.*",
+                "*.dto.*",
+                "*.enums.*",
+                "*.*Application*",
+                "*.exception.*"
+            )
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
+}
+
+jacoco {
+    toolVersion = "0.8.10"
 }

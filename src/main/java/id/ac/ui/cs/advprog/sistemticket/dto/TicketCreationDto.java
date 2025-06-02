@@ -20,7 +20,6 @@ public class TicketCreationDto implements Serializable {
     @Min(value = 1, message = "Quota must be at least 1")
     private Integer quota;
     
-    @NotBlank(message = "Description is required")
     private String description;
     
     @NotNull(message = "Sale start time is required")
@@ -29,7 +28,7 @@ public class TicketCreationDto implements Serializable {
     @NotNull(message = "Sale end time is required")
     private Long saleEnd;
     
-    private String userId; // Add this field
+    private String userId;
     
     // Getters and setters
     public String getEventId() {
@@ -87,7 +86,7 @@ public class TicketCreationDto implements Serializable {
     public void setSaleEnd(Long saleEnd) {
         this.saleEnd = saleEnd;
     }
-
+    
     public String getUserId() {
         return userId;
     }

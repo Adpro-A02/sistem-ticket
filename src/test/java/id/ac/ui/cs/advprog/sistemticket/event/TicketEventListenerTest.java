@@ -31,7 +31,7 @@ public class TicketEventListenerTest {
         // Create the event
         TicketPurchasedEvent event = new TicketPurchasedEvent(ticket, 5);
         
-        // Verify event handler doesn't throw exceptions
+        // Verify event handler doesn't throw exceptions (works without metrics)
         assertDoesNotThrow(() -> ticketEventListener.handleTicketPurchasedEvent(event));
     }
 }

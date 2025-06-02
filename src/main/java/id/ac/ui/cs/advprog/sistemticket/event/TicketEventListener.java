@@ -15,14 +15,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class TicketEventListener {
     private static final Logger logger = LoggerFactory.getLogger(TicketEventListener.class);
     
-    @Autowired
+    @Autowired(required = false)
     private MeterRegistry meterRegistry;
     
     @Async
     @EventListener
     @Timed(value = "ticket.event.processing.time", description = "Time taken to process ticket events")
     public void handleTicketPurchasedEvent(TicketPurchasedEvent event) {
-        Timer.Sample sample = Timer.start(meterRegistry);
+        Timer.Sample sample = null;
+        if (meterRegistry != null) {
+            sample = Timer.start(meterRegistry);
+        }
         
         try {
             // This method runs asynchronously when a ticket is purchased
@@ -38,15 +41,19 @@ public class TicketEventListener {
             // 4. Generate PDF tickets
             
             // Record the event processing in a counter
-            meterRegistry.counter("ticket.events.processed", 
-                    "eventType", "purchase", 
-                    "ticketType", event.getTicket().getType())
-                    .increment();
+            if (meterRegistry != null) {
+                meterRegistry.counter("ticket.events.processed", 
+                        "eventType", "purchase", 
+                        "ticketType", event.getTicket().getType())
+                        .increment();
+            }
         } finally {
             // Record how long it took to process the event
-            sample.stop(meterRegistry.timer("ticket.event.processing.time", 
-                    "eventType", "purchase",
-                    "ticketType", event.getTicket().getType()));
+            if (sample != null && meterRegistry != null) {
+                sample.stop(meterRegistry.timer("ticket.event.processing.time", 
+                        "eventType", "purchase",
+                        "ticketType", event.getTicket().getType()));
+            }
         }
     }
 }

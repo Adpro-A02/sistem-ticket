@@ -2,8 +2,10 @@ package id.ac.ui.cs.advprog.sistemticket.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.argThat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,8 +26,8 @@ import id.ac.ui.cs.advprog.sistemticket.event.TicketPurchasedEvent;
 import id.ac.ui.cs.advprog.sistemticket.model.Ticket;
 import id.ac.ui.cs.advprog.sistemticket.repository.TicketRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import static org.mockito.ArgumentMatchers.argThat;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -48,6 +50,18 @@ class TicketServiceImplTest {
     private String eventId1;
     private String eventId2;
     private Long currentTime;
+    
+    @Mock
+    private io.micrometer.core.instrument.Counter ticketCreatedCounter;
+    
+    @Mock
+    private io.micrometer.core.instrument.Counter ticketPurchasedCounter;
+    
+    @Mock
+    private io.micrometer.core.instrument.Timer ticketPurchaseTimer;
+    
+    @Mock
+    private io.micrometer.core.instrument.Counter ticketStatusUpdateCounter;
     
     @BeforeEach
     void setUp() {
@@ -275,35 +289,75 @@ class TicketServiceImplTest {
     
     @Test
     void testPurchaseTicketTooMany() {
-        Ticket ticket = tickets.get(0);
-        int purchaseAmount = ticket.getRemainingQuota() + 1; // One more than available
+        // Create a fresh ticket with known quota and ensure it's properly initialized
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            5, // Small total quota
+            "Regular ticket for concert",
+            currentTime,
+            currentTime + 86400000
+        );
+        // Manually set the remaining quota to ensure we know the exact state
+        ticket.setRemainingQuota(3); // Only 3 tickets left
+        
+        int purchaseAmount = 5; // Trying to buy more than available
         
         when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
-        assertThrows(IllegalArgumentException.class, () -> ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000));
-        verify(ticketRepository, times(0)).save(any(Ticket.class));
+        // The exception should be thrown due to insufficient quota
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> 
+            ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000));
+        
+        // Verify the exception message contains the expected text
+        assertTrue(exception.getMessage().contains("Cannot purchase tickets:") || 
+                  exception.getMessage().contains("Not enough tickets available"));
+        verify(ticketRepository, never()).save(any(Ticket.class));
     }
     
     @Test
     void testPurchaseTicketOutsideSalePeriod() {
-        Ticket ticket = tickets.get(0);
-        Long invalidTime = ticket.getSaleEnd() + 1000; // After sale period
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100,
+            "Regular ticket for concert",
+            currentTime + 5000, // Sale starts in the future
+            currentTime + 86400000 // Sale ends in the future
+        );
+        Long invalidTime = currentTime + 1000; // Before sale starts
         
         when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
-        assertThrows(IllegalArgumentException.class, () -> ticketService.purchaseTicket(ticket.getId(), 1, invalidTime));
-        verify(ticketRepository, times(0)).save(any(Ticket.class));
+        // This should fail because the purchase time is before the sale start time
+        assertThrows(IllegalArgumentException.class, () -> 
+            ticketService.purchaseTicket(ticket.getId(), 1, invalidTime));
+        verify(ticketRepository, never()).save(any(Ticket.class));
     }
     
     @Test
     void testPurchaseTicketNotAvailable() {
-        Ticket ticket = tickets.get(0);
-        ticket.setStatus(TicketStatus.PURCHASED.getValue()); // Set to non-available status
+        // Create a ticket and explicitly set status to PURCHASED to make it unavailable
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100,
+            "Regular ticket for concert",
+            currentTime,
+            currentTime + 86400000
+        );
+        // Set status to PURCHASED to make it unavailable for purchase
+        ticket.setStatus(TicketStatus.PURCHASED.getValue());
         
         when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
         
-        assertThrows(IllegalArgumentException.class, () -> ticketService.purchaseTicket(ticket.getId(), 1, currentTime + 1000));
-        verify(ticketRepository, times(0)).save(any(Ticket.class));
+        // This should fail because ticket status is not AVAILABLE
+        assertThrows(IllegalArgumentException.class, () -> 
+            ticketService.purchaseTicket(ticket.getId(), 1, currentTime + 1000));
+        verify(ticketRepository, never()).save(any(Ticket.class));
     }
     
     @Test
@@ -327,15 +381,32 @@ class TicketServiceImplTest {
     
     @Test
     void testPurchaseTicketPublishesEvent() {
-        // Setup
-        Ticket ticket = tickets.get(0);
+        // Setup - Create a fresh ticket with known state
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100,
+            "Regular ticket for concert",
+            currentTime - 1000, // Sale started 1 second ago
+            currentTime + 86400000 // Sale ends much later
+        );
+        // Explicitly set all required fields to ensure the ticket is available
+        ticket.setRemainingQuota(100); // Ensure enough quota
+        ticket.setStatus(TicketStatus.AVAILABLE.getValue()); // Ensure it's available
+        
         int purchaseAmount = 5;
+        Long purchaseTime = currentTime + 500; // Purchase time within sale period
         
         when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
-        when(ticketRepository.save(any(Ticket.class))).thenReturn(ticket);
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
         
-        // Execute
-        ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000);
+        // Execute - Purchase within the sale period
+        Ticket result = ticketService.purchaseTicket(ticket.getId(), purchaseAmount, purchaseTime);
+        
+        // Verify the purchase was successful
+        assertNotNull(result);
+        assertEquals(95, result.getRemainingQuota()); // 100 - 5 = 95
         
         // Use ArgumentCaptor to capture and verify the event
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -343,7 +414,7 @@ class TicketServiceImplTest {
         // Verify the captured event
         TicketPurchasedEvent capturedEvent = eventCaptor.getValue();
         assertNotNull(capturedEvent);
-        assertEquals(ticket, capturedEvent.getTicket());
+        assertEquals(ticket.getId(), capturedEvent.getTicket().getId());
         assertEquals(purchaseAmount, capturedEvent.getAmount());
     }
     
@@ -384,6 +455,359 @@ class TicketServiceImplTest {
 
         verify(ticketRepository).findById(nonExistentId);
         verify(ticketRepository, never()).save(any(Ticket.class));
+    }
+    
+    @Test
+    void testCreateTicketWithNullCounter() {
+        // Test the null check branch for ticketCreatedCounter
+        Ticket ticket = tickets.get(0);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.empty());
+        when(ticketRepository.save(ticket)).thenReturn(ticket);
+        
+        // Set counter to null to test the null check
+        ReflectionTestUtils.setField(ticketService, "ticketCreatedCounter", null);
+        
+        Ticket result = ticketService.createTicket(ticket);
+        
+        verify(ticketRepository, times(1)).save(ticket);
+        assertEquals(ticket.getId(), result.getId());
+    }
+    
+    @Test
+    void testCreateTicketWithCounter() {
+        // Test the branch where counter is not null
+        Ticket ticket = tickets.get(0);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.empty());
+        when(ticketRepository.save(ticket)).thenReturn(ticket);
+        
+        // Ensure counter is set
+        ReflectionTestUtils.setField(ticketService, "ticketCreatedCounter", ticketCreatedCounter);
+        
+        Ticket result = ticketService.createTicket(ticket);
+        
+        verify(ticketRepository, times(1)).save(ticket);
+        verify(ticketCreatedCounter, times(1)).increment();
+        assertEquals(ticket.getId(), result.getId());
+    }
+    
+    @Test
+    void testUpdateStatusWithNullCounter() {
+        // Test the null check branch for ticketStatusUpdateCounter
+        Ticket ticket = tickets.get(0);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+        // Set counter to null
+        ReflectionTestUtils.setField(ticketService, "ticketStatusUpdateCounter", null);
+        
+        Ticket result = ticketService.updateStatus(ticket.getId(), TicketStatus.PURCHASED.getValue());
+        
+        assertEquals(TicketStatus.PURCHASED.getValue(), result.getStatus());
+    }
+    
+    @Test
+    void testUpdateStatusWithCounter() {
+        // Test the branch where counter is not null
+        Ticket ticket = tickets.get(0);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+        // Ensure counter is set
+        ReflectionTestUtils.setField(ticketService, "ticketStatusUpdateCounter", ticketStatusUpdateCounter);
+        
+        Ticket result = ticketService.updateStatus(ticket.getId(), TicketStatus.PURCHASED.getValue());
+        
+        assertEquals(TicketStatus.PURCHASED.getValue(), result.getStatus());
+        verify(ticketStatusUpdateCounter, times(1)).increment();
+    }
+    
+    @Test
+    void testPurchaseTicketWithNullTimer() {
+        // Test the branch where timer is null
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100, // Use explicit quota
+            "Regular ticket for concert",
+            currentTime,
+            currentTime + 86400000
+        );
+        ticket.setRemainingQuota(100); // Set explicit remaining quota
+        
+        int purchaseAmount = 5;
+        
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+        // Set timer to null
+        ReflectionTestUtils.setField(ticketService, "ticketPurchaseTimer", null);
+        ReflectionTestUtils.setField(ticketService, "ticketPurchasedCounter", null);
+        
+        Ticket result = ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000);
+        
+        // The remaining quota should be initial quota (100) minus purchased amount (5) = 95
+        assertEquals(95, result.getRemainingQuota());
+        verify(eventPublisher).publishEvent(any(TicketPurchasedEvent.class));
+    }
+    
+    @Test
+    void testPurchaseTicketWithTimerAndNullCounter() {
+        // Test the branch where timer is not null but counter is null
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100, // Use explicit quota
+            "Regular ticket for concert",
+            currentTime,
+            currentTime + 86400000
+        );
+        ticket.setRemainingQuota(100); // Set explicit remaining quota
+        
+        int purchaseAmount = 5;
+        
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+        // Mock the timer to execute the supplier
+        when(ticketPurchaseTimer.record(any(java.util.function.Supplier.class))).thenAnswer(invocation -> {
+            java.util.function.Supplier<?> supplier = invocation.getArgument(0);
+            return supplier.get();
+        });
+        
+        // Set timer but null counter
+        ReflectionTestUtils.setField(ticketService, "ticketPurchaseTimer", ticketPurchaseTimer);
+        ReflectionTestUtils.setField(ticketService, "ticketPurchasedCounter", null);
+        
+        Ticket result = ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000);
+        
+        // The remaining quota should be initial quota (100) minus purchased amount (5) = 95
+        assertEquals(95, result.getRemainingQuota());
+        verify(ticketPurchaseTimer, times(1)).record(any(java.util.function.Supplier.class));
+    }
+    
+    @Test
+    void testPurchaseTicketWithTimerAndCounter() {
+        // Test the branch where both timer and counter are not null
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100, // Use explicit quota
+            "Regular ticket for concert",
+            currentTime,
+            currentTime + 86400000
+        );
+        ticket.setRemainingQuota(100); // Set explicit remaining quota
+        
+        int purchaseAmount = 5;
+        
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+        // Mock the timer to execute the supplier
+        when(ticketPurchaseTimer.record(any(java.util.function.Supplier.class))).thenAnswer(invocation -> {
+            java.util.function.Supplier<?> supplier = invocation.getArgument(0);
+            return supplier.get();
+        });
+        
+        // Set both timer and counter
+        ReflectionTestUtils.setField(ticketService, "ticketPurchaseTimer", ticketPurchaseTimer);
+        ReflectionTestUtils.setField(ticketService, "ticketPurchasedCounter", ticketPurchasedCounter);
+        
+        Ticket result = ticketService.purchaseTicket(ticket.getId(), purchaseAmount, currentTime + 1000);
+        
+        // The remaining quota should be initial quota (100) minus purchased amount (5) = 95
+        assertEquals(95, result.getRemainingQuota());
+        verify(ticketPurchaseTimer, times(1)).record(any(java.util.function.Supplier.class));
+        verify(ticketPurchasedCounter, times(1)).increment(purchaseAmount);
+    }
+    
+    @Test
+    void testPurchaseTicketNotFound() {
+        // Test the case where ticket is not found
+        String nonExistentId = "non-existent-id";
+        when(ticketRepository.findById(nonExistentId)).thenReturn(Optional.empty());
+        
+        assertThrows(NoSuchElementException.class, 
+            () -> ticketService.purchaseTicket(nonExistentId, 1, currentTime + 1000));
+        
+        verify(ticketRepository, never()).save(any(Ticket.class));
+    }
+    
+    @Test
+    void testProcessTicketExpirationNotExpired() throws ExecutionException, InterruptedException {
+        // Test the branch where ticket is not expired
+        Ticket ticket = tickets.get(0);
+        String ticketId = ticket.getId();
+        
+        // Set sale end time to future (not expired)
+        ticket.setSaleEnd(System.currentTimeMillis() + 10000);
+        
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        
+        CompletableFuture<Void> future = ticketService.processTicketExpiration(ticketId);
+        future.get();
+        
+        verify(ticketRepository).findById(ticketId);
+        // Verify save is not called since ticket is not expired
+        verify(ticketRepository, never()).save(any(Ticket.class));
+    }
+    
+    @Test
+    void testPurchaseTicketZeroAmount() {
+        // Test edge case with zero amount - this should fail at the service level validation
+        Ticket ticket = tickets.get(0);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        
+        // The service validates amount > 0 before checking ticket availability
+        assertThrows(IllegalArgumentException.class, 
+            () -> ticketService.purchaseTicket(ticket.getId(), 0, currentTime + 1000));
+        
+        verify(ticketRepository, never()).save(any(Ticket.class));
+    }
+    
+    @Test
+    void testPurchaseTicketNegativeAmount() {
+        // Test edge case with negative amount - this should fail at the service level validation
+        Ticket ticket = tickets.get(0);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        
+        // The service validates amount > 0 before checking ticket availability
+        assertThrows(IllegalArgumentException.class, 
+            () -> ticketService.purchaseTicket(ticket.getId(), -1, currentTime + 1000));
+        
+        verify(ticketRepository, never()).save(any(Ticket.class));
+    }
+    
+    @Test
+    void testPurchaseTicketWithExpiredStatus() {
+        // Test purchasing expired ticket - create with explicit EXPIRED status
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100,
+            "Regular ticket for concert",
+            currentTime,
+            currentTime + 86400000,
+            TicketStatus.EXPIRED.getValue() // Create with EXPIRED status
+        );
+        
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        
+        // This should fail because ticket status is EXPIRED
+        assertThrows(IllegalArgumentException.class, () -> 
+            ticketService.purchaseTicket(ticket.getId(), 1, currentTime + 1000));
+        verify(ticketRepository, never()).save(any(Ticket.class));
+    }
+    
+    @Test
+    void testPurchaseTicketWithUsedStatus() {
+        // Test purchasing used ticket - create with explicit USED status
+        Ticket ticket = new Ticket(
+            eventId1,
+            "REGULAR",
+            150.0,
+            100,
+            "Regular ticket for concert",
+            currentTime,
+            currentTime + 86400000,
+            TicketStatus.USED.getValue() // Create with USED status
+        );
+        
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        
+        // This should fail because ticket status is USED
+        assertThrows(IllegalArgumentException.class, () -> 
+            ticketService.purchaseTicket(ticket.getId(), 1, currentTime + 1000));
+        verify(ticketRepository, never()).save(any(Ticket.class));
+    }
+    
+    @Test
+    void testProcessTicketExpirationWithExactTime() throws ExecutionException, InterruptedException {
+        // Test the exact boundary condition for expiration
+        Ticket ticket = tickets.get(0);
+        String ticketId = ticket.getId();
+        
+        // Set sale end time to be in the past (ensuring expiration condition is met)
+        ticket.setSaleEnd(System.currentTimeMillis() - 1000); // 1 second in the past
+        
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenReturn(ticket);
+        
+        CompletableFuture<Void> future = ticketService.processTicketExpiration(ticketId);
+        future.get();
+        
+        verify(ticketRepository).findById(ticketId);
+        // Should save since sale end time is in the past
+        verify(ticketRepository).save(argThat(savedTicket ->
+            savedTicket.getStatus().equals(TicketStatus.EXPIRED.getValue())));
+    }
+    
+    @Test
+    void testUpdateStatusAllValidStatuses() {
+        // Test updating to all valid status values to ensure branch coverage
+        Ticket ticket = tickets.get(0);
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+        // Test each valid status
+        for (TicketStatus status : TicketStatus.values()) {
+            ReflectionTestUtils.setField(ticketService, "ticketStatusUpdateCounter", ticketStatusUpdateCounter);
+            
+            Ticket result = ticketService.updateStatus(ticket.getId(), status.getValue());
+            assertEquals(status.getValue(), result.getStatus());
+        }
+        
+        // Verify counter was incremented for each status update
+        verify(ticketStatusUpdateCounter, times(TicketStatus.values().length)).increment();
+    }
+    
+    @Test
+    void testFindAllEmptyList() {
+        // Test finding all tickets when repository returns empty list
+        when(ticketRepository.findAll()).thenReturn(new ArrayList<>());
+        
+        List<Ticket> result = ticketService.findAll();
+        
+        assertTrue(result.isEmpty());
+        verify(ticketRepository, times(1)).findAll();
+    }
+    
+    @Test
+    void testFindAllByEventIdEmptyList() {
+        // Test finding tickets by event ID when none exist
+        when(ticketRepository.findAllByEventId("non-existent-event")).thenReturn(new ArrayList<>());
+        
+        List<Ticket> result = ticketService.findAllByEventId("non-existent-event");
+        
+        assertTrue(result.isEmpty());
+        verify(ticketRepository, times(1)).findAllByEventId("non-existent-event");
+    }
+    
+    @Test
+    void testFindAllByTypeEmptyList() {
+        // Test finding tickets by type when none exist
+        when(ticketRepository.findAllByType("NON_EXISTENT_TYPE")).thenReturn(new ArrayList<>());
+        
+        List<Ticket> result = ticketService.findAllByType("NON_EXISTENT_TYPE");
+        
+        assertTrue(result.isEmpty());
+        verify(ticketRepository, times(1)).findAllByType("NON_EXISTENT_TYPE");
+    }
+    
+    @Test
+    void testFindAllAvailableEmptyList() {
+        // Test finding available tickets when none exist
+        Long testTime = currentTime + 1000;
+        when(ticketRepository.findAllAvailable(testTime)).thenReturn(new ArrayList<>());
+        
+        List<Ticket> result = ticketService.findAllAvailable(testTime);
+        
+        assertTrue(result.isEmpty());
+        verify(ticketRepository, times(1)).findAllAvailable(testTime);
     }
 }
 
